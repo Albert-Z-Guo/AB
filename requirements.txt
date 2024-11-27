@@ -3,5 +3,6 @@ folium
 geopy
 matplotlib
 numpy
+openpyxl
 pandas
 streamlit
