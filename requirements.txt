@@ -1,0 +1,7 @@
+cvxpy
+folium
+geopy
+matplotlib
+numpy
+pandas
+streamlit
