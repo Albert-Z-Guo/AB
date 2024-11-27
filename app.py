@@ -60,8 +60,14 @@ def format_millions(x, _):
         return f'${int(millions)}M'
 
 def format_number(x):
-    """Format numbers with dollar sign and commas"""
-    return f'${int(round(x)):,}'
+    """Format numbers with M/K suffix based on magnitude"""
+    if abs(x) >= 1e3:
+        # For values >= 1K show as integer thousands (e.g., 489K)
+        thousands = x / 1e3
+        return f'${int(round(thousands)):,}K'
+    else:
+        # For small values, show as integer
+        return f'${int(round(x))}'
                 
 def create_progressive_total_cost_plots(data, month_order, output_dir):
     """
@@ -421,92 +427,125 @@ def get_problem_dimensions(df: pd.DataFrame) -> None:
     """
     Print key dimensions of the optimization problem.
     """
-    dim_text = f"""Problem Size:
-    Total rows: {len(df)}
-    Products (i): {df['i'].nunique()}
-    Plants (j): {df['j'].nunique()}
-    Warehouses (k): {df['k'].nunique()}"""
-    st.text(dim_text)
+    st.markdown(f"""
+    - **Total rows**: {len(df)}
+    - **# of Products**: {df['i'].nunique()}
+    - **# of Plants**: {df['j'].nunique()} 
+    - **# of Warehouses**: {df['k'].nunique()}
+    """)
 
-def check_feasibility(df: pd.DataFrame) -> None:
+def check_feasibility(df: pd.DataFrame, mappings: dict) -> tuple[pd.DataFrame, bool]:
     """
     Check and display feasibility for each product.
+    Returns a tuple of (feasibility DataFrame, overall feasibility boolean)
     """
     feasibility_data = []
+    all_feasible = True # Track overall feasibility
     
     for i in sorted(df['i'].unique()):
         # Get total demand - sum over unique (i,k) combinations
         demand = df[df['i'] == i].groupby('k')['D_{ik}'].first().sum()
         
-        # Get total capacity - sum over unique (i,j) combinations
+        # Get total capacity - sum over unique (i,j) combinations 
         capacity = df[df['i'] == i].groupby('j')['C_{ij}'].first().sum()
         
         # Create feasibility status
         is_feasible = capacity >= demand
+        all_feasible &= is_feasible # Update overall feasibility
         
         feasibility_data.append({
-            'Product': int(i),
-            'Demand': f"{demand:.1f}",
-            'Capacity': f"{capacity:.1f}",
-            'Feasible': str(is_feasible),
-            'Color': 'green' if is_feasible else 'red'
+            'Product Name': mappings['products'][int(i)], # Use product name from mappings
+            'Sales (Demand)': f"{demand:.1f}",
+            'Production Capacity': f"{capacity:.1f}", 
+            'Feasible': str(is_feasible)
         })
-    
-    # Display as DataFrame with colored text
-    feasibility_df = pd.DataFrame(feasibility_data)
-    st.dataframe(feasibility_df.style.apply(lambda x: [f'color: {row["Color"]}' for _, row in feasibility_df.iterrows()]))
+        
+        # Display as DataFrame with colored text only in Feasible column
+        feasibility_df = pd.DataFrame(feasibility_data)
 
-def create_pattern_visualizations(df: pd.DataFrame) -> None:
+    def color_feasible(val):
+        color = 'green' if val == 'True' else 'red'
+        return f'color: {color}'
+    
+    st.dataframe(feasibility_df.style.applymap(color_feasible, subset=['Feasible']))
+    
+    return feasibility_df, all_feasible
+
+def create_pattern_visualizations(df: pd.DataFrame, mappings: dict) -> None:
     """
-    Create and display production and shipping pattern visualizations.
+    Create and display production and shipping pattern visualizations 
+    with mapped names and codes.
     """
     # Create production pattern
     prod_pattern = pd.DataFrame('□', 
-                            index=[f"Product {int(i)}" for i in sorted(df['i'].unique())],
-                            columns=[f"Plant {int(j)}" for j in sorted(df['j'].unique())],
+                            index=[mappings['products'][int(i)] for i in sorted(df['i'].unique())],
+                            columns=[mappings['plants'][int(j)] for j in sorted(df['j'].unique())],
                             dtype=str)
 
     for _, row in df.iterrows():
         if row['C_{ij}'] > 0:
-            prod_pattern.loc[f"Product {int(row['i'])}", f"Plant {int(row['j'])}"] = '■'
+            prod_pattern.loc[mappings['products'][int(row['i'])], 
+                           mappings['plants'][int(row['j'])]] = '■'
 
     st.write("Production Capability Map (■ = can produce, □ = cannot produce)")
     st.dataframe(prod_pattern)
 
-    # Create shipping pattern
+    # Create shipping pattern  
     ship_pattern = pd.DataFrame('□',
-                            index=[f"Product {int(i)}" for i in sorted(df['i'].unique())],
-                            columns=[f"WH {int(k)}" for k in sorted(df['k'].unique())],
+                            index=[mappings['products'][int(i)] for i in sorted(df['i'].unique())],
+                            columns=[str(mappings['warehouses'][int(k)]) for k in sorted(df['k'].unique())],
                             dtype=str)
 
     for _, row in df.iterrows():
         if row['D_{ik}'] > 0:
-            ship_pattern.loc[f"Product {int(row['i'])}", f"WH {int(row['k'])}"] = '■'
+            ship_pattern.loc[mappings['products'][int(row['i'])],
+                           str(mappings['warehouses'][int(row['k'])])] = '■'
 
-    st.write("Shipping Demand Map (■ = has demand, □ = no demand)")
+    st.write("Shipping Demand Map (■ = has demand, □ = no demand)") 
     st.dataframe(ship_pattern)
 
 def adjust_capacity(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Identify capacity issues and adjust capacity.
+    Identify capacity issues, adjust capacity to mimic specific inventory usage, 
+    then proportionally where needed (so that the linear program is feasible), and display results.
     """
     df_adj = df.copy()
-    
-    # Identify instances where current shipping exceeds capacity
-    df['x_{ij}'] = df.groupby(['i', 'j'])['x_{ijk}'].transform('sum')
-    df_merged = df[['i', 'j', 'x_{ij}', 'C_{ij}']].drop_duplicates()
-    df_merged['capacity_exceeded'] = df_merged['x_{ij}'] > df_merged['C_{ij}']
-    capacity_issues = df_merged[df_merged['capacity_exceeded']]
-    
-    # Adjust capacity as if necessary inventory is used
     adjustments = []
-    for _, row in capacity_issues.iterrows():
-        i, j, x_ij, C_ij = row['i'], row['j'], row['x_{ij}'], row['C_{ij}']
-        df_adj.loc[(df_adj['i'] == i) & (df_adj['j'] == j), 'C_{ij}'] = x_ij
-        adjustments.append({'Product': int(i), 'Plant': int(j), 
-                          'Original': C_ij, 'Adjusted': x_ij, 
-                          'Scale': x_ij / C_ij})
+
+    # Only run the initial capacity adjustment if x_{ijk} column exists
+    if 'x_{ijk}' in df.columns:
+        # Identify instances where current shipping exceeds capacity (due to inventory using)
+        df['x_{ij}'] = df.groupby(['i', 'j'])['x_{ijk}'].transform('sum')
+        df_merged = df[['i', 'j', 'x_{ij}', 'C_{ij}']].drop_duplicates()
+        df_merged['capacity_exceeded'] = df_merged['x_{ij}'] > df_merged['C_{ij}']
+        capacity_issues = df_merged[df_merged['capacity_exceeded']]
+        
+        if not capacity_issues.empty:
+            # Adjust capacity to mimic the usage of inventory
+            for _, row in capacity_issues.iterrows():
+                i, j, x_ij, C_ij = row['i'], row['j'], row['x_{ij}'], row['C_{ij}']
+                df_adj.loc[(df_adj['i'] == i) & (df_adj['j'] == j), 'C_{ij}'] = x_ij
+                adjustments.append({'Product': int(i), 'Plant': int(j), 
+                                    'Original': C_ij, 'Adjusted': x_ij, 
+                                    'Scale': x_ij / C_ij})
     
+    # Proportionally adjust remaining capacity if needed so that the linear program is feasible
+    for i in df['i'].unique():
+        total_demand = df[df['i'] == i].groupby('k')['D_{ik}'].first().sum()
+        total_capacity = df_adj[df_adj['i'] == i].groupby('j')['C_{ij}'].first().sum()
+        
+        if total_capacity < total_demand:
+            alpha = total_demand / total_capacity
+            mask = (df['i'] == i) & (~df.index.isin(capacity_issues.index))
+            
+            for j in df[mask]['j'].unique():
+                original = df_adj.loc[(df_adj['i'] == i) & (df_adj['j'] == j), 'C_{ij}'].iloc[0] 
+                df_adj.loc[(df_adj['i'] == i) & (df_adj['j'] == j), 'C_{ij}'] *= alpha
+                adjusted = df_adj.loc[(df_adj['i'] == i) & (df_adj['j'] == j), 'C_{ij}'].iloc[0]
+                adjustments.append({'Product': int(i), 'Plant': int(j),
+                                    'Original': original, 'Adjusted': adjusted,  
+                                    'Scale': alpha})
+        
     return df_adj, pd.DataFrame(adjustments)
 
 def get_sourcing_constraints(df, x, sheet_name):
@@ -639,7 +678,7 @@ def optimize_month(df, sheet_name):
 
     return df
 
-def optimize_all_months(uploaded_file):
+def optimize_all_months(uploaded_file, mappings):
     """Process all months and return results DataFrame and Excel output"""
     month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     summaries = []
@@ -659,25 +698,24 @@ def optimize_all_months(uploaded_file):
             
             # Display problem dimensions
             with st.expander(f"Problem Details - {month}", expanded=False):
-                st.write("### Problem Dimensions")
+                st.write("#### Problem Dimensions")
                 get_problem_dimensions(df)
                 
-                st.write("### Initial Feasibility Check")
-                check_feasibility(df)
+                st.write("#### Initial Feasibility Check")
+                feasibility_df, all_feasible = check_feasibility(df, mappings)
                 
-                st.write("### Pattern Visualizations")
-                create_pattern_visualizations(df)
+                st.write("#### Production and Shipping Patterns")
+                create_pattern_visualizations(df, mappings)
 
-            # Adjust capacity if needed
-            df_adjusted, adjustments = adjust_capacity(df)
-            if not adjustments.empty:
-                with st.expander(f"Capacity Adjustments - {month}", expanded=False):
-                    st.write("### Capacity Adjustments")
+                # Adjust capacity if needed
+                df_adjusted, adjustments = adjust_capacity(df)
+                if not adjustments.empty and not all_feasible:
+                    st.write("#### Capacity Adjustments")
                     st.dataframe(adjustments)
                     
-                    st.write("### Final Feasibility Check")
-                    check_feasibility(df_adjusted)
-                df = df_adjusted
+                    st.write("#### Final Feasibility Check")
+                    check_feasibility(df_adjusted, mappings)
+                    df = df_adjusted
             
             # Run optimization for the current month
             df = optimize_month(df, sheet_name)
@@ -1090,7 +1128,7 @@ with tab1:
     if st.session_state['uploaded_file'] is not None:
         if st.button("Run Optimization"):
             with st.spinner("Running optimization for all months..."):
-                monthly_data, results_df, output = optimize_all_months(st.session_state['uploaded_file'])
+                monthly_data, results_df, output = optimize_all_months(st.session_state['uploaded_file'], mappings)
                 
                 if results_df is not None:
                     # Store results in session state
