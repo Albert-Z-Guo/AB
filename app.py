@@ -841,27 +841,29 @@ def create_supply_chain_map(plants, warehouses):
     """
     m.get_root().header.add_child(folium.Element(popup_style))
 
-    # Create markers
-    def create_marker(location, popup, shape='hex', color='#d73027'):
-        return folium.RegularPolygonMarker(location=location, popup=popup, number_of_sides={'square':4,'triangle':3,'hex':6}[shape],
-                                         radius=12 if shape!='hex' else 6, color=color, fill_color=color, fill_opacity=0.5,
-                                         weight=2, rotation=45 if shape=='square' else 0)
-
-    # Add markers
+    # Add plant markers with 'industry' icon
     for _, p in plants.iterrows():
         if pd.notna(p['lat']):
-            popup = folium.Popup(f"""<div style='font-family:Arial,sans-serif;min-width:180px'>
-                                <strong>{p['City']} ({p['Code']})</strong><br>Plant #{p['Plant #']}<br>{p['Type']} Plant</div>""", max_width=300)
-            popup._name = popup._name.replace('popup','custom-popup')
-            create_marker([p['lat'],p['lon']], popup, 'square' if p['Type']=='Can' else 'triangle', 
-                        '#2c5aa0' if p['Type']=='Can' else '#4d9221').add_to(m)
+            popup_html = f"""<b>Plant: {p['Plant #']}</b><br>
+                Code: {p['Code']}, {p['City']}, {p['State']}<br>
+                Type: {p['Type']} Plant"""
+            icon_color = 'blue' if p['Type'] == 'Can' else 'red'
+            folium.Marker(
+                location=[p['lat'], p['lon']],
+                icon=folium.Icon(color=icon_color, icon='industry', prefix='fa'),
+                popup=folium.Popup(popup_html, max_width=300)
+            ).add_to(m)
 
+    # Add warehouse markers with 'warehouse' icon
     for _, w in warehouses.iterrows():
         if pd.notna(w['lat']):
-            popup = folium.Popup(f"""<div style='font-family:Arial,sans-serif;min-width:180px'>
-                                <strong>{w['Name']}</strong><br>Warehouse #{w['ID']}<br>{w['City']}, {w['State']}</div>""", max_width=300)
-            popup._name = popup._name.replace('popup','custom-popup')
-            create_marker([w['lat'],w['lon']], popup).add_to(m)
+            popup_html = f"""<b>Warehouse: {w['ID']}</b><br>
+                Name: {w['Name']}, {w['City']}, {w['State']}"""
+            folium.Marker(
+                location=[w['lat'], w['lon']],
+                icon=folium.Icon(color='green', icon='warehouse', prefix='fa'),
+                popup=folium.Popup(popup_html, max_width=300)
+            ).add_to(m)
 
     # Legend HTML - using percentage positioning
     legend_html = """
@@ -946,32 +948,33 @@ def create_supply_chain_map(plants, warehouses):
     m.get_root().html.add_child(folium.Element(tables_html))
     return m
 
-def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_id=4, base_only=True, month='Jan', mappings=None):
+def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_id=4, base_only=True, month='Jan', mappings=mappings):
     """
-    Create an interactive map showing shipping route changes based on optimization results.
-    Uses monthly_data directly instead of reading from Excel.
-    """    
-    # Get data for specified month
+    Create an interactive map showing shipping route changes with animated paths using AntPath.
+    Markers for plants and warehouses are displayed only if they are involved in the routes.
+    Adds numeric labels above the middle of each arrow.
+    """
+    # Get data for the specified month
     month_data = next((data['data'] for data in monthly_data if data['month'] == month), None)
     if month_data is None:
         raise ValueError(f"No data found for month: {month}")
     
-    # Filter for specific product
+    # Filter for the specific product
     df_product = month_data[month_data['i'] == product_id].copy()
     
-    # Calculate costs - using sum() to convert Series to scalar
-    current_ship_cost = ((df_product['c^l_{ijk}'] * df_product['x_{ijk}']).sum())
-    current_prod_cost = ((df_product['c^p_{ij}'] * df_product['x_{ijk}']).sum())
-    current_total = current_ship_cost + current_prod_cost
+    # Get costs directly from df_product
+    current_ship_cost = df_product['current_shipping'].sum()
+    current_prod_cost = df_product['current_production'].sum()
+    current_total = df_product['current_cost'].sum()
     
     if base_only:
-        opt_ship_cost = ((df_product['c^l_{ijk}'] * df_product['x^*_{ijk}_base']).sum())
-        opt_prod_cost = ((df_product['c^p_{ij}'] * df_product['x^*_{ijk}_base']).sum())
-        opt_total = opt_ship_cost + opt_prod_cost
+        opt_ship_cost = df_product['base_shipping_cost'].sum()
+        opt_prod_cost = df_product['base_production_cost'].sum()
+        opt_total = df_product['base_total_cost'].sum()
     else:
-        opt_ship_cost = ((df_product['c^l_{ijk}'] * df_product['x^*_{ijk}_base_and_rules']).sum())
-        opt_prod_cost = ((df_product['c^p_{ij}'] * df_product['x^*_{ijk}_base_and_rules']).sum())
-        opt_total = opt_ship_cost + opt_prod_cost
+        opt_ship_cost = df_product['base_and_rules_shipping_cost'].sum()
+        opt_prod_cost = df_product['base_and_rules_production_cost'].sum()
+        opt_total = df_product['base_and_rules_total_cost'].sum()
     
     # Filter for non-zero differences
     diff_col = 'diff_base' if base_only else 'diff_base_and_rules'
@@ -993,104 +996,77 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     routes_df['warehouse_name'] = routes_df['warehouse_id'].map(df_warehouses.set_index('ID')['Name'].get)
     routes_df['associated_customers'] = routes_df['warehouse_id'].map(lambda x: ', '.join(map(str, warehouse_customers_dict[x])))
     
-    # Create mapping dictionaries for coordinates with string keys
+    # Prepare mappings for coordinates
     plant_coords = dict(zip(df_plants['Code'].astype(str), zip(df_plants['lat'], df_plants['lon'])))
     warehouse_coords = dict(zip(df_warehouses['ID'].astype(str), zip(df_warehouses['lat'], df_warehouses['lon'])))
     
-    # Create base map centered on US
+    # Create the map centered on the US
     m = folium.Map(location=[30, -98.5795], zoom_start=5)
     
-    # Add plant markers for all plants in the routes
-    unique_plants = routes_df['plant_code'].unique()
-    for plant_code in unique_plants:
-        if plant_code in plant_coords:
-            lat, lon = plant_coords[plant_code]
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=8,
-                color='black',
-                fill=True,
-                fillColor='#1f77b4',
-                fillOpacity=0.7,
-                popup=f"Plant: {plant_code}"
-            ).add_to(m)
-        else:
-            print(f"Warning: No coordinates found for plant {plant_code}")
+    # Add markers only for relevant plants
+    for _, row in df_plants[df_plants['Code'].isin(routes_df['plant_code'].unique())].iterrows():
+        popup_html = f"""<b>Plant: {row['Plant #']}</b><br>
+                Code: {row['Code']}, {row['City']}, {row['State']}<br>
+                Type: {row['Type']} Plant"""
+        folium.Marker(
+            location=[row['lat'], row['lon']],
+            icon=folium.Icon(color='blue', icon='industry', prefix='fa'),
+            popup=folium.Popup(popup_html, max_width=300)
+        ).add_to(m)
     
-    # Add warehouse markers for affected warehouses
-    affected_warehouses = routes_df['warehouse_id'].unique()
-    for wh in affected_warehouses:
-        if wh in warehouse_coords:
-            lat, lon = warehouse_coords[wh]
-            popup_html = f"""
-                <b>Warehouse: {wh}</b><br>
-                Name: {routes_df[routes_df['warehouse_id'] == wh]['warehouse_name'].values[0]}<br>
-                Customers: {routes_df[routes_df['warehouse_id'] == wh]['associated_customers'].values[0]}
-            """
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=6,
-                color='black',
-                fill=True,
-                fillColor='green',
-                fillOpacity=0.7,
-                popup=folium.Popup(popup_html, max_width=300)
-            ).add_to(m)
-        else:
-            print(f"Warning: No coordinates found for warehouse {wh}")
+    # Add markers only for relevant warehouses
+    for _, row in df_warehouses[df_warehouses['ID'].isin(routes_df['warehouse_id'].unique())].iterrows():
+        popup_html = f"""<b>Warehouse: {row['ID']}</b><br>
+                    Name: {row['Name']}, {row['City']}, {row['State']}<br>
+                    Customers: {routes_df[routes_df['warehouse_id'] == row['ID']]['associated_customers'].values[0]}"""
+        folium.Marker(
+            location=[row['lat'], row['lon']],
+            icon=folium.Icon(color='green', icon='warehouse', prefix='fa'),
+            popup=folium.Popup(popup_html, max_width=300)
+        ).add_to(m)
 
-    def get_arrow_color(value):
-        return 'red' if value < 0 else 'blue'
-    
-    def get_arrow_weight(value):
-        return 2 + (abs(value) / 20)  # Scale line thickness based on magnitude
-    
-    # Plot all routes with non-zero differences
+    # Add animated routes with AntPath and numeric labels
     for _, row in routes_df.iterrows():
-        plant_code = str(row['plant_code'])
-        wh = str(row['warehouse_id'])
+        plant_code = row['plant_code']
+        warehouse_id = row['warehouse_id']
         value = row[diff_col]
-        
-        if plant_code in plant_coords and wh in warehouse_coords:
-            plant_loc = list(plant_coords[plant_code])
-            wh_loc = list(warehouse_coords[wh])
+        if plant_code in plant_coords and warehouse_id in warehouse_coords:
+            plant_loc = plant_coords[plant_code]
+            wh_loc = warehouse_coords[warehouse_id]
             
-            plugins.AntPath(
+            # Add AntPath for animation
+            folium.plugins.AntPath(
                 locations=[plant_loc, wh_loc],
-                color=get_arrow_color(value),
-                weight=get_arrow_weight(value),
-                popup=None,  # No popup
-                delay=1000,
-                dash_array=[10, 20],
-                opacity=0.7
+                color='blue' if value > 0 else 'red',  # Blue for increase, red for decrease
+                weight=2 + abs(value) / 20,  # Scale weight by magnitude
+                opacity=0.7,
+                dash_array=[10, 20],  # Dashed line style
+                delay=1000  # Animation delay
             ).add_to(m)
             
-            # Add text annotation for volume change
+            # Add numeric label at the midpoint
             mid_lat = (plant_loc[0] + wh_loc[0]) / 2
             mid_lon = (plant_loc[1] + wh_loc[1]) / 2
-            
             folium.Marker(
                 location=[mid_lat, mid_lon],
                 icon=folium.DivIcon(
-                    icon_size=(150,24),
-                    icon_anchor=(0,0),
-                    html=f'<div style="font-size: 12px; font-weight: bold; color: {get_arrow_color(value)};">{value:.2f} M</div>'
+                    icon_size=(150, 24),
+                    icon_anchor=(0, 0),
+                    html=f'<div style="font-size: 12px; font-weight: bold; color: {"blue" if value > 0 else "red"};">{value:.2f}</div>'
                 )
             ).add_to(m)
         else:
-            print(f"Warning: Cannot plot route from {plant_code} to {wh} - missing coordinates")
-            print(f"Plant {plant_code} in coords: {plant_code in plant_coords}")
-            print(f"Warehouse {wh} in coords: {wh in warehouse_coords}")
+            print(f"Missing coordinates for plant {plant_code} or warehouse {warehouse_id}")
     
     # Add legend with cost summary
-    legend_html = f'''
+    legend_html = f"""
         <div style="position: fixed; 
                     top: 15px; right: 15px; 
                     border:2px solid grey; z-index:9999; 
                     background-color:white;
                     padding: 10px;
                     font-size:14px;">
-          <p style="margin:0"><b>Recommended Shipping Routes Changes</b></p>
+          <p style="margin:0"><b>Shipping Routes Changes</b></p>
           <p style="margin:0">Product: {mappings['products'].get(product_id, f'Product {product_id}')}</p>
           <p style="margin:0">Optimization: {'Base Only' if base_only else 'Base + Rules'}</p>
           <p style="margin:0; color:blue;">Blue: Increased Volume →</p>
@@ -1107,7 +1083,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
           <hr style="margin:5px 0">
           <p style="margin:0"><b>Total Savings: ${current_total - opt_total:,.2f}</b></p>
         </div>
-        '''
+    """
     m.get_root().html.add_child(folium.Element(legend_html))
     
     return m, routes_df
@@ -1236,7 +1212,7 @@ def validate_uploaded_file(uploaded_file):
             missing_columns = [col for col in required_columns if col not in sheet_data.columns]
             
             if missing_columns:
-                return False, f"Missing required columns in sheet '{sheet}': {', '.join(missing_columns)}"
+                return False, f"Missing required columns in sheet '{sheet}': {', '.join(missing_columns)}!"
         
         return True, ""  # File is valid
     except Exception as e:
@@ -1456,7 +1432,7 @@ with tab3:
                 base_only = st.radio(
                     "Optimization Type",
                     options=["Base Only", "Base + Rules"],
-                    index=0
+                    index=1 # Default to Base Only
                 ) == "Base Only"
             
             if st.button("Generate Visualization"):
