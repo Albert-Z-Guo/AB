@@ -419,7 +419,7 @@ def check_feasibility(df: pd.DataFrame, mappings: dict) -> tuple[pd.DataFrame, b
         color = 'green' if val == 'True' else 'red'
         return f'color: {color}'
     
-    st.dataframe(feasibility_df.style.applymap(color_feasible, subset=['Feasible']))
+    st.dataframe(feasibility_df.style.map(color_feasible, subset=['Feasible']))
     
     return feasibility_df, all_feasible
 
@@ -849,69 +849,71 @@ def create_supply_chain_map(plants, warehouses):
                 opacity=0.7
             ).add_to(m)
 
-    # Legend HTML - using percentage positioning
     legend_html = """
-    <div style="position: fixed; 
-                top: 15px; left: 50px;
-                border: 2px solid grey; 
-                z-index: 1000;
-                background-color: white;
-                padding: 6px;
-                font-family: Arial;
-                font-size: 11px;
-                opacity: 0.9">
-        <div style="margin-bottom: 5px"><strong>Markers</strong></div>
-        <div style="margin-bottom: 3px">
-            <i class="fa fa-industry" style="color:#39a9dc"></i> Can Plant
+        <div style="position: fixed; 
+                    top: 15px; left: 50px;
+                    max-width: 90%; /* Adjust width to be responsive */
+                    border: 2px solid grey; 
+                    z-index: 1000;
+                    background-color: white;
+                    padding: calc(0.5vw); /* Responsive padding */
+                    font-family: Arial;
+                    font-size: calc(0.8vw); /* Responsive font size */
+                    opacity: 0.9;
+                    box-sizing: border-box;">
+            <div style="margin-bottom: 5px"><strong>Markers</strong></div>
+            <div style="margin-bottom: 3px">
+                <i class="fa fa-industry" style="color:#39a9dc"></i> Can Plant
+            </div>
+            <div style="margin-bottom: 3px">
+                <i class="fa fa-industry" style="color:#df3822"></i> Lid Plant
+            </div>
+            <div style="margin-bottom: 3px">
+                <i class="fa fa-warehouse" style="color:#72b024"></i> Warehouse
+            </div>
         </div>
-        <div style="margin-bottom: 3px">
-            <i class="fa fa-industry" style="color:#df3822"></i> Lid Plant
-        </div>
-        <div style="margin-bottom: 3px">
-            <i class="fa fa-warehouse" style="color:#72b024"></i> Warehouse
-        </div>
-    </div>
-    """
+        """
 
-    # Tables HTML - also using percentage positioning
     tables_html = f"""
-    <div style="position: fixed; 
-                top: 15px; right: 10px;
-                width: 350px;
-                border: 2px solid grey; 
-                z-index: 1000;
-                background-color: white;
-                padding: 6px;
-                font-family: Arial;
-                font-size: 12px;
-                opacity: 0.9">
-        <div style="margin-bottom: 3px"><strong>Manufacturing Plants</strong></div>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px">
-            <tr style="background-color: #f0f0f0">
-                <th style="border: 1px solid #ddd; padding: 2px">Plant #</th>
-                <th style="border: 1px solid #ddd; padding: 2px">Code</th>
-                <th style="border: 1px solid #ddd; padding: 2px">Location</th>
-                <th style="border: 1px solid #ddd; padding: 2px">Type</th>
-            </tr>
-            {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['Plant #']}</td>"
-                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Code']}</td>"
-                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td>"
-                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Type']}</td></tr>" 
-                     for _, row in plants.iterrows())}
-        </table>
-        <div style="margin-bottom: 3px"><strong>Warehouses</strong></div>
-        <table style="width: 100%; border-collapse: collapse">
-            <tr style="background-color: #f0f0f0">
-                <th style="border: 1px solid #ddd; padding: 2px">Warehouse #</th>
-                <th style="border: 1px solid #ddd; padding: 2px">Name</th>
-                <th style="border: 1px solid #ddd; padding: 2px">Location</th>
-            </tr>
-            {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['ID']}</td>"
-                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Name']}</td>"
-                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td></tr>" 
-                     for _, row in warehouses.iterrows())}
-        </table>
-    </div>
+        <div style="position: fixed; 
+                    top: 15px; right: 10px;
+                    max-width: 90%; /* Adjust width to be responsive */
+                    border: 2px solid grey; 
+                    z-index: 1000;
+                    background-color: white;
+                    padding: 6px;
+                    font-family: Arial;
+                    font-size: calc(0.8vw); /* Responsive font size */
+                    opacity: 0.9;
+                    overflow: auto; /* Enable scrolling if needed */
+                    box-sizing: border-box;">
+            <div style="margin-bottom: 3px"><strong>Manufacturing Plants</strong></div>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px">
+                <tr style="background-color: #f0f0f0">
+                    <th style="border: 1px solid #ddd; padding: 2px">Plant #</th>
+                    <th style="border: 1px solid #ddd; padding: 2px">Code</th>
+                    <th style="border: 1px solid #ddd; padding: 2px">Location</th>
+                    <th style="border: 1px solid #ddd; padding: 2px">Type</th>
+                </tr>
+                {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['Plant #']}</td>"
+                        f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Code']}</td>"
+                        f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td>"
+                        f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Type']}</td></tr>" 
+                        for _, row in plants.iterrows())}
+            </table>
+            <div style="margin-bottom: 3px"><strong>Warehouses</strong></div>
+            <table style="width: 100%; border-collapse: collapse">
+                <tr style="background-color: #f0f0f0">
+                    <th style="border: 1px solid #ddd; padding: 2px">Warehouse #</th>
+                    <th style="border: 1px solid #ddd; padding: 2px">Name</th>
+                    <th style="border: 1px solid #ddd; padding: 2px">Location</th>
+                </tr>
+                {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['ID']}</td>"
+                        f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Name']}</td>"
+                        f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td></tr>" 
+                        for _, row in warehouses.iterrows())}
+            </table>
+        </div>
     """
 
     # Add legend and tables to map
@@ -958,7 +960,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     df_plants['Code'] = df_plants['Code'].astype(str)
     df_warehouses['ID'] = df_warehouses['ID'].astype(str)
 
-    # Add random noise to coordinates to avoid overlap
+    # Add random noise to coordinates to avoid overlap cases
     df_plants['lat'] += np.random.uniform(-0.005, 0.005, size=len(df_plants))
     df_plants['lon'] += np.random.uniform(-0.005, 0.005, size=len(df_plants))
     df_warehouses['lat'] += np.random.uniform(-0.005, 0.005, size=len(df_warehouses))
@@ -985,9 +987,10 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
         popup_html = f"""<b>Plant: {row['Plant #']}</b><br>
                 Code: {row['Code']}, {row['City']}, {row['State']}<br>
                 Type: {row['Type']} Plant"""
+        icon_color = 'blue' if row['Type'] == 'Can' else 'red'
         folium.Marker(
             location=[row['lat'], row['lon']],
-            icon=folium.Icon(color='blue', icon='industry', prefix='fa'),
+            icon=folium.Icon(color=icon_color, icon='industry', prefix='fa'),
             popup=folium.Popup(popup_html, max_width=300)
         ).add_to(m)
     
@@ -1033,30 +1036,34 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
         else:
             print(f"Missing coordinates for plant {plant_code} or warehouse {warehouse_id}")
     
-    # Add legend with cost summary
+    # Add legend for cost summary
     legend_html = f"""
         <div style="position: fixed; 
                     top: 15px; right: 15px; 
-                    border:2px solid grey; z-index:9999; 
-                    background-color:white;
-                    padding: 10px;
-                    font-size:14px;">
-          <p style="margin:0"><b>Suggested Shipping Routes</b></p>
-          <p style="margin:0">Product: {mappings['products'].get(product_id, f'Product {product_id}')}</p>
-          <p style="margin:0">Optimization: {'Base Only' if base_only else 'Base + Rules'}</p>
-          <p style="margin:0; color:green;">Green: Increased Volume →</p>
-          <p style="margin:0; color:red;">Red: Decreased Volume →</p>
-          <p style="margin:0">Line thickness indicates magnitude</p>
-          <hr style="margin:5px 0">
-          <p style="margin:0"><b>Current Total Cost: ${current_total:,.2f}</b></p>
-          <p style="margin:0">Shipping: ${current_ship_cost:,.2f}</p>
-          <p style="margin:0">Production: ${current_prod_cost:,.2f}</p>
-          <hr style="margin:5px 0">
-          <p style="margin:0"><b>Optimized Total Cost: ${opt_total:,.2f}</b></p>
-          <p style="margin:0">Shipping: ${opt_ship_cost:,.2f}</p>
-          <p style="margin:0">Production: ${opt_prod_cost:,.2f}</p>
-          <hr style="margin:5px 0">
-          <p style="margin:0"><b>Total Savings: ${current_total - opt_total:,.2f}</b></p>
+                    border: 2px solid grey; z-index: 9999; 
+                    background-color: white;
+                    padding: calc(0.5vw); /* Responsive padding */
+                    font-family: Arial;
+                    font-size: calc(0.9vw); /* Responsive font size */
+                    opacity: 0.9;
+                    max-width: 90%; /* Prevents overflow */
+                    box-sizing: border-box;">
+        <p style="margin: 0; font-weight: bold;">Suggested Shipping Routes</p>
+        <p style="margin: 0;">Product: {mappings['products'].get(product_id, f'Product {product_id}')}</p>
+        <p style="margin: 0;">Optimization: {'Base Only' if base_only else 'Base + Rules'}</p>
+        <p style="margin: 0; color: green;">Green: Increased Volume →</p>
+        <p style="margin: 0; color: red;">Red: Decreased Volume →</p>
+        <p style="margin: 0;">Line thickness indicates magnitude</p>
+        <hr style="margin: 5px 0;">
+        <p style="margin: 0; font-weight: bold;">Current Total Cost: ${current_total:,.2f}</p>
+        <p style="margin: 0;">Shipping: ${current_ship_cost:,.2f}</p>
+        <p style="margin: 0;">Production: ${current_prod_cost:,.2f}</p>
+        <hr style="margin: 5px 0;">
+        <p style="margin: 0; font-weight: bold;">Optimized Total Cost: ${opt_total:,.2f}</p>
+        <p style="margin: 0;">Shipping: ${opt_ship_cost:,.2f}</p>
+        <p style="margin: 0;">Production: ${opt_prod_cost:,.2f}</p>
+        <hr style="margin: 5px 0;">
+        <p style="margin: 0; font-weight: bold;">Total Savings: ${current_total - opt_total:,.2f}</p>
         </div>
     """
     m.get_root().html.add_child(folium.Element(legend_html))
@@ -1478,7 +1485,7 @@ with st.sidebar:
     with st.expander("Instructions"):
         st.write("""
         ### Step 1: Run Optimization
-        1. Upload your Solver_Sales_Monthly.xlsx file
+        1. Upload Solver_Sales_Monthly.xlsx data file
         2. Click "Run Optimization" to process all months
         3. Download the optimization results file
         
@@ -1486,17 +1493,13 @@ with st.sidebar:
         1. Select a product from the dropdown
         2. Choose a month to analyze
         3. Select the optimization type
-        4. Click "Generate Visualization" to update the map
+        4. Click "Generate Visualization" to visualize optimization results
+        5. Scroll down to review the cost comparison and savings summary
                  
-        ### Step 3: Visualize Suggested Shipping Routes
+        ### Step 3: Visualize Suggested Routes
         1. Select the product you wish to analyze using the dropdown menu.
         2. Choose the month of interest.
         3. Select the optimization type: "Base Only" or "Base + Rules."
-        4. Click "Generate Visualization" to create an interactive map.
-        5. Analyze suggested route changes:
-           - Increased volumes are shown in **blue** lines.
-           - Decreased volumes are shown in **red** lines.
-           - Line thickness reflects the magnitude of changes.
-        6. Scroll down to review a detailed table of changes, highlighting:
-           - Plants, warehouses, customers, and volume differences.
+        4. Click "Generate Visualization" to see the suggested shipping routes
+        5. Scroll down to review the suggested shipping routes details
         """)
