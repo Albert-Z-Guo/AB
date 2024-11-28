@@ -1224,7 +1224,7 @@ with tab1:
         st.session_state['monthly_data'] = None
         st.session_state['results'] = None
 
-    uploaded_file = st.file_uploader("Upload Solver_Sales_Monthly.xlsx", type=['xlsx'])
+    uploaded_file = st.file_uploader("Upload `Solver_Sales_Monthly.xlsx` that contains monthly sales (demand), shipping costs, production costs, and production capacity data:", type=['xlsx'])
     
     if uploaded_file is not None:
         # Validate the file
@@ -1282,7 +1282,7 @@ with tab2:
     st.header("Visualize Optimization Results")
     
     if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
-        st.warning("Please run optimization first in the 'Run Optimization' tab.")
+        st.warning("Please run optimization first in the **Run Optimization** tab.")
     else:
         try:
             # Create placeholder for plots
@@ -1391,7 +1391,7 @@ with tab3:
     st.header("Visualize Suggested Shipping Routes")
     
     if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
-        st.warning("Please run optimization first in the 'Run Optimization' tab.")
+        st.warning("Please run optimization first in the **Run Optimization** tab.")
     else:
         try:
             col1, col2, col3 = st.columns(3)
@@ -1482,24 +1482,30 @@ with tab3:
 
 # Add instructions
 with st.sidebar:
-    with st.expander("Instructions"):
+    with st.expander("Instructions"): # Use auto-width by default
         st.write("""
         ### Step 1: Run Optimization
-        1. Upload Solver_Sales_Monthly.xlsx data file
-        2. Click "Run Optimization" to process all months
-        3. Download the optimization results file
+        1. Upload the input data file `Solver_Sales_Monthly.xlsx` containing monthly sales (demand), shipping costs, production costs, and production capacity data
+        2. Click "Run Optimization" to process data and generate optimal shipping plans for all months
+        3. Download the complete results in `Optimization_Results_Monthly.xlsx`
         
-        ### Step 2: Visualize Results
-        1. Select a product from the dropdown
-        2. Choose a month to analyze
-        3. Select the optimization type
-        4. Click "Generate Visualization" to visualize optimization results
-        5. Scroll down to review the cost comparison and savings summary
-                 
-        ### Step 3: Visualize Suggested Routes
-        1. Select the product you wish to analyze using the dropdown menu.
-        2. Choose the month of interest.
-        3. Select the optimization type: "Base Only" or "Base + Rules."
-        4. Click "Generate Visualization" to see the suggested shipping routes
-        5. Scroll down to review the suggested shipping routes details
+        ### Step 2: View Optimization Analysis
+        1. After running optimization, navigate to the "Visualize Results" tab
+        2. Review the generated cost comparison charts and savings analysis
+        3. Examine the detailed breakdowns of:
+           - Total costs (current vs optimized)  
+           - Production and shipping cost changes
+           - Monthly and product-specific savings
+        
+        ### Step 3: Explore Shipping Routes
+        1. Navigate to the "Visualize Suggested Routes" tab
+        2. Select specific parameters:
+           - Product type (e.g., Lids, 12oz cans)
+           - Month to analyze 
+           - Optimization type (Base Only vs Base + Rules)
+        3. Click "Generate Visualization" to view:
+           - Interactive map showing suggested route changes
+           - Green arrows: increased shipment volume
+           - Red arrows: decreased shipment volume
+           - Detailed breakdown of warehouse allocations
         """)
