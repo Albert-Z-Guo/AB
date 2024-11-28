@@ -848,10 +848,13 @@ def create_supply_chain_map(plants, warehouses):
                 Code: {p['Code']}, {p['City']}, {p['State']}<br>
                 Type: {p['Type']} Plant"""
             icon_color = 'blue' if p['Type'] == 'Can' else 'red'
+            print(popup_html)
             folium.Marker(
-                location=[p['lat'], p['lon']],
+                location=[p['lat'] + (np.random.random() - 0.5) * 0.1,  # Add random noise to avoid display overlap 
+                         p['lon'] + (np.random.random() - 0.5) * 0.1],
                 icon=folium.Icon(color=icon_color, icon='industry', prefix='fa'),
-                popup=folium.Popup(popup_html, max_width=300)
+                popup=folium.Popup(popup_html, max_width=300),
+                # opacity=0.9
             ).add_to(m)
 
     # Add warehouse markers with 'warehouse' icon
@@ -860,9 +863,11 @@ def create_supply_chain_map(plants, warehouses):
             popup_html = f"""<b>Warehouse: {w['ID']}</b><br>
                 Name: {w['Name']}, {w['City']}, {w['State']}"""
             folium.Marker(
-                location=[w['lat'], w['lon']],
+                location=[w['lat'] + (np.random.random() - 0.5) * 0.1,  # Add random noise to avoid display overlap 
+                         w['lon'] + (np.random.random() - 0.5) * 0.1],
                 icon=folium.Icon(color='green', icon='warehouse', prefix='fa'),
-                popup=folium.Popup(popup_html, max_width=300)
+                popup=folium.Popup(popup_html, max_width=300),
+                opacity=0.7
             ).add_to(m)
 
     # Legend HTML - using percentage positioning
@@ -1053,7 +1058,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
                     background-color:white;
                     padding: 10px;
                     font-size:14px;">
-          <p style="margin:0"><b>Shipping Routes Changes</b></p>
+          <p style="margin:0"><b>Suggested Shipping Routes</b></p>
           <p style="margin:0">Product: {mappings['products'].get(product_id, f'Product {product_id}')}</p>
           <p style="margin:0">Optimization: {'Base Only' if base_only else 'Base + Rules'}</p>
           <p style="margin:0; color:blue;">Blue: Increased Volume →</p>
@@ -1427,7 +1432,7 @@ with tab3:
                     with st.spinner("Generating shipping routes visualization..."):
                         monthly_data = st.session_state['monthly_data']
                         
-                        st.write(f"Routes for {selected_product} in {selected_month} under {'Base Only' if base_only else 'Base + Rules'} optimization:")
+                        st.write(f"Suggested Routes for {selected_product} in {selected_month} under {'Base Only' if base_only else 'Base + Rules'} optimization:")
                         
                         # Verify data
                         month_data = next((data['data'] for data in monthly_data if data['month'] == selected_month), None)
