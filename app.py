@@ -876,28 +876,15 @@ def create_supply_chain_map(plants, warehouses):
                 font-family: Arial;
                 font-size: 11px;
                 opacity: 0.9">
-        <div style="margin-bottom: 5px"><strong>AB Supply Chain Network</strong></div>
+        <div style="margin-bottom: 5px"><strong>Markers</strong></div>
         <div style="margin-bottom: 3px">
-            <svg height="15" width="15">
-                <rect x="2" y="2" width="10" height="10" 
-                      transform="rotate(45 7 7)"
-                      fill="#2c5aa0" fill-opacity="0.3" 
-                      stroke="#2c5aa0" stroke-opacity="0.4"/>
-            </svg> Can Plant
+            <i class="fa fa-industry" style="color:#39a9dc"></i> Can Plant
         </div>
         <div style="margin-bottom: 3px">
-            <svg height="15" width="15">
-                <polygon points="7,2 13,12 1,12"
-                         fill="#4d9221" fill-opacity="0.3" 
-                         stroke="#4d9221" stroke-opacity="0.4"/>
-            </svg> Lid Plant
+            <i class="fa fa-industry" style="color:#df3822"></i> Lid Plant
         </div>
-        <div>
-            <svg height="15" width="15">
-                <polygon points="7,2 12,5 12,10 7,13 2,10 2,5"
-                         fill="#d73027" fill-opacity="0.3" 
-                         stroke="#d73027" stroke-opacity="0.4"/>
-            </svg> Warehouse
+        <div style="margin-bottom: 3px">
+            <i class="fa fa-warehouse" style="color:#72b024"></i> Warehouse
         </div>
     </div>
     """
