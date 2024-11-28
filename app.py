@@ -360,23 +360,6 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     
     # Create progressive total cost comparison plots
     create_progressive_total_cost_plots(total_data, month_order, output_dir)
-    
-    # Print statistics
-    print("\nOptimization Statistics:")
-    base_savings = total_data['base_total_savings']
-    base_savings_percent = (base_savings / total_data['current_cost']) * 100
-    rules_savings = total_data['base_and_rules_total_savings']
-    rules_savings_percent = (rules_savings / total_data['current_cost']) * 100
-    
-    print(f"\nBase Optimization:")
-    print(f"Average Monthly Savings: {format_number(base_savings.mean())}")
-    print(f"Average Savings Percentage: {base_savings_percent.mean():.1f}%")
-    print(f"Total Annual Savings: {format_number(base_savings.sum())}")
-    
-    print(f"\nBase + Rules Optimization:")
-    print(f"Average Monthly Savings: {format_number(rules_savings.mean())}")
-    print(f"Average Savings Percentage: {rules_savings_percent.mean():.1f}%")
-    print(f"Total Annual Savings: {format_number(rules_savings.sum())}")
 
 def load_and_clean_data(file_path: str, sheet_name: str) -> pd.DataFrame:
     """
@@ -396,9 +379,6 @@ def load_and_clean_data(file_path: str, sheet_name: str) -> pd.DataFrame:
     return df
 
 def get_problem_dimensions(df: pd.DataFrame) -> None:
-    """
-    Print key dimensions of the optimization problem.
-    """
     st.markdown(f"""
     - **Total rows**: {len(df)}
     - **# of Products**: {df['i'].nunique()}
@@ -848,7 +828,6 @@ def create_supply_chain_map(plants, warehouses):
                 Code: {p['Code']}, {p['City']}, {p['State']}<br>
                 Type: {p['Type']} Plant"""
             icon_color = 'blue' if p['Type'] == 'Can' else 'red'
-            print(popup_html)
             folium.Marker(
                 location=[p['lat'] + (np.random.random() - 0.5) * 0.1,  # Add random noise to avoid display overlap 
                          p['lon'] + (np.random.random() - 0.5) * 0.1],
@@ -1029,7 +1008,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
             # Add AntPath for animation
             folium.plugins.AntPath(
                 locations=[plant_loc, wh_loc],
-                color='blue' if value > 0 else 'red',  # Blue for increase, red for decrease
+                color='green' if value > 0 else 'red',  # Blue for increase, red for decrease
                 weight=2 + abs(value) / 20,  # Scale weight by magnitude
                 opacity=0.7,
                 dash_array=[10, 20],  # Dashed line style
@@ -1037,14 +1016,12 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
             ).add_to(m)
             
             # Add numeric label at the midpoint
-            mid_lat = (plant_loc[0] + wh_loc[0]) / 2
-            mid_lon = (plant_loc[1] + wh_loc[1]) / 2
             folium.Marker(
-                location=[mid_lat, mid_lon],
+                location=[(plant_loc[0] + wh_loc[0]) / 2, (plant_loc[1] + wh_loc[1]) / 2],
                 icon=folium.DivIcon(
                     icon_size=(150, 24),
                     icon_anchor=(0, 0),
-                    html=f'<div style="font-size: 12px; font-weight: bold; color: {"blue" if value > 0 else "red"};">{value:.2f}</div>'
+                    html=f'<div style="font-size: 12px; font-weight: bold; color: {"green" if value > 0 else "red"};">{"+" if value > 0 else ""}{value:.2f}</div>'
                 )
             ).add_to(m)
         else:
@@ -1061,7 +1038,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
           <p style="margin:0"><b>Suggested Shipping Routes</b></p>
           <p style="margin:0">Product: {mappings['products'].get(product_id, f'Product {product_id}')}</p>
           <p style="margin:0">Optimization: {'Base Only' if base_only else 'Base + Rules'}</p>
-          <p style="margin:0; color:blue;">Blue: Increased Volume →</p>
+          <p style="margin:0; color:green;">Green: Increased Volume →</p>
           <p style="margin:0; color:red;">Red: Decreased Volume →</p>
           <p style="margin:0">Line thickness indicates magnitude</p>
           <hr style="margin:5px 0">
