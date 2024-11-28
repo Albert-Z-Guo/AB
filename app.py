@@ -1088,7 +1088,7 @@ with tab1:
     if 'optimization_results' not in st.session_state:
         st.session_state['optimization_results'] = None
         st.session_state['monthly_data'] = None
-        st.session_state['results_df'] = None
+        st.session_state['results'] = None
 
     uploaded_file = st.file_uploader("Upload Solver_Sales_Monthly.xlsx", type=['xlsx'])
     
@@ -1121,26 +1121,10 @@ with tab1:
                         # Store results in session state
                         st.session_state['optimization_results'] = output
                         st.session_state['monthly_data'] = results['monthly_data']
-                        st.session_state['results_df'] = results['results_df']
+                        st.session_state['results'] = results
                         
                         # Display optimization summary
                         st.success("Optimization complete!")
-                        
-                        # Display overall statistics
-                        with st.expander("View Optimization Statistics", expanded=True):
-                            annual_summary = results['annual_summary']
-                            
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.metric(
-                                    "Total Base Optimization Savings", 
-                                    format_number(annual_summary['base_total_savings'].iloc[0])
-                                )
-                            with col2:
-                                st.metric(
-                                    "Total Base + Rules Optimization Savings",
-                                    format_number(annual_summary['base_and_rules_total_savings'].iloc[0])
-                                )
                     else:
                         st.error("Optimization failed. Please check your input data.")
                 except Exception as e:
@@ -1168,7 +1152,7 @@ with tab2:
             with plot_container:                
                 # Reset file pointer and read Summary sheet
                 st.session_state['optimization_results'].seek(0)
-                results_df = st.session_state['results_df']
+                results_df = st.session_state['results']['results_df']
                 
                 # Generate plots
                 create_optimization_plots(results_df, "./")
@@ -1192,6 +1176,75 @@ with tab2:
                         st.image("savings_comparison_by_product.png")
                     except Exception as e:
                         st.error(f"Error loading savings comparison plots: {str(e)}")
+            
+            # Display overall statistics
+            st.header("View Optimization Statistics")
+            # Extract annual summary
+            annual_summary = st.session_state['results']['annual_summary']
+            
+            # Extract costs and savings
+            current_cost = annual_summary['current_cost'].iloc[0]
+            current_production_cost = annual_summary['current_production'].iloc[0]
+            current_shipping_cost = annual_summary['current_shipping'].iloc[0]
+            
+            base_total_cost = annual_summary['base_total_cost'].iloc[0]
+            base_production_cost = annual_summary['base_production_cost'].iloc[0]
+            base_shipping_cost = annual_summary['base_shipping_cost'].iloc[0]
+            
+            rules_total_cost = annual_summary['base_and_rules_total_cost'].iloc[0]
+            rules_production_cost = annual_summary['base_and_rules_production_cost'].iloc[0]
+            rules_shipping_cost = annual_summary['base_and_rules_shipping_cost'].iloc[0]
+            
+            # Create a DataFrame for cost metrics
+            cost_comparison_df = pd.DataFrame({
+                "Cost Type": ["Total Cost", "Production Cost", "Shipping Cost"],
+                "Current": [
+                    format_number(current_cost),
+                    format_number(current_production_cost),
+                    format_number(current_shipping_cost)
+                ],
+                "Base Optimization": [
+                    format_number(base_total_cost),
+                    format_number(base_production_cost),
+                    format_number(base_shipping_cost)
+                ],
+                "Base + Rules Optimization": [
+                    format_number(rules_total_cost),
+                    format_number(rules_production_cost),
+                    format_number(rules_shipping_cost)
+                ]
+            })
+            
+            # Display the DataFrame
+            st.subheader("Cost Comparison")
+            st.dataframe(cost_comparison_df, use_container_width=True)
+
+            # Calculate savings metrics
+            base_savings = annual_summary['base_total_savings'].iloc[0]
+            base_savings_percent = (base_savings / current_cost) * 100
+            rules_savings = annual_summary['base_and_rules_total_savings'].iloc[0]
+            rules_savings_percent = (rules_savings / current_cost) * 100
+
+            # Create a DataFrame for savings summary
+            savings_summary_df = pd.DataFrame({
+                "Optimization Type": ["Base Optimization", "Base + Rules Optimization"],
+                "Average Monthly Savings": [
+                    format_number(base_savings / 12),
+                    format_number(rules_savings / 12)
+                ],
+                "Average Savings Percentage": [
+                    f"{base_savings_percent:.1f}%",
+                    f"{rules_savings_percent:.1f}%"
+                ],
+                "Total Annual Savings": [
+                    format_number(base_savings),
+                    format_number(rules_savings)
+                ]
+            })
+
+            # Display the DataFrame
+            st.subheader("Savings Summary")
+            st.dataframe(savings_summary_df, use_container_width=True)
         except Exception as e:
             st.error(f"Error generating visualization: {str(e)}")
 
@@ -1275,7 +1328,7 @@ with tab3:
                                 return f'color: {color}'
                             
                             styled_df = routes_display.reset_index(drop=True).style.map(style_diff, subset=['Shipment Adjustment (Million Units)'])
-                            st.dataframe(styled_df)
+                            st.dataframe(styled_df, use_container_width=True)
                         else:
                             st.info("No route changes found for the selected criteria.")
                             
