@@ -1,3 +1,4 @@
+import io
 from collections import defaultdict
 from typing import Tuple
 
@@ -9,9 +10,8 @@ from geopy.exc import GeocoderTimedOut
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
 import streamlit as st
-import io
+
 
 # Define mappings
 mappings = {
@@ -82,7 +82,7 @@ def create_progressive_total_cost_plots(data, month_order, output_dir):
             if pd.notnull(v) and v > 0:
                 plt.text(x[i], v, format_number(v), 
                         ha='center', va='bottom',
-                        rotation=0, fontsize=8,
+                        rotation=0, fontsize=10,
                         color='k')
             
     colors = ['#4B0082', '#20B2AA', '#FF6B6B']  # Indigo, Light Sea Green, Coral
@@ -202,20 +202,12 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    # Save and display product comparison plot
+    # Save product comparison plot
     plt.savefig(f'{output_dir}/savings_comparison_by_product.png',
                 dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()
     
-    # 2. Savings Comparison by Month
-    def format_to_k(value):
-        """Format numbers to K format, rounded to nearest thousand."""
-        if value >= 1000:
-            return f'${round(value/1000):,.0f}K'
-        else:
-            return f'${round(value):,.0f}'
-
-    # Savings Comparison by Month
+    # 2. Monthly Savings Analysis
     fig, ax1 = plt.subplots(figsize=(12, 7))
 
     # Filter and prepare monthly data
@@ -240,15 +232,15 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
                     color='#4169E1',
                     alpha=0.6)
 
-    # Add bar value labels with K formatting
+    # Add bar value labels
     def add_value_labels(bars, values):
         for bar, value in zip(bars, values):
             if value > 0:
                 ax1.text(bar.get_x() + bar.get_width()/2,
                         value + value*0.01,
-                        format_to_k(value),
+                        format_number(value),
                         ha='center', va='bottom',
-                        fontsize=8,
+                        fontsize=10,
                         rotation=0)
 
     add_value_labels(bars1, base_savings)
@@ -256,12 +248,12 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
 
     # Configure primary y-axis
     ax1.set_ylabel('Total Savings')
-    ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format_to_k(x)))
+    ax1.yaxis.set_major_formatter(plt.FuncFormatter(format_millions))
 
     # Create secondary y-axis for percentages
     ax2 = ax1.twinx()
 
-    # Plot percentage lines with improved visibility
+    # Plot percentage lines
     line1 = ax2.plot(x, base_savings_percent,
                     color='#FF6B6B',
                     linestyle='--',
@@ -277,7 +269,7 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
                     markersize=4,
                     label='Base + Rules Savings % to Current Total')
 
-    # Add percentage labels with improved visibility
+    # Add percentage labels
     def add_percent_labels(x_pos, percentages, color, offset):
         for i, pct in enumerate(percentages):
             if pd.notnull(pct):
@@ -305,19 +297,19 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(lines1 + lines2, labels1 + labels2,
-            loc='upper right',
-            fontsize='small')
+              loc='upper right',
+              fontsize='small')
 
     plt.title('Savings Comparison by Month', pad=20)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    # Save plot
-    plt.savefig('savings_comparison_by_month.png',
-                dpi=300,
-                bbox_inches='tight')
-    
-    # 3. Total Cost Comparison
+    # Save monthly savings plot
+    plt.savefig(f'{output_dir}/savings_comparison_by_month.png',
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # 3. Cost Comparison Plots
     def create_cost_comparison_plot(data, cost_type, columns, labels):
         plt.figure(figsize=(12, 7))
         
@@ -331,7 +323,7 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
                 if pd.notnull(val) and val > 0:
                     plt.text(j, val, format_number(val),
                             ha='center', va='bottom',
-                            rotation=0, fontsize=8)
+                            rotation=0, fontsize=10)
         
         plt.title(f'{cost_type} Cost Comparison', pad=20)
         plt.xlabel('Month')
@@ -345,18 +337,14 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
         # Save plot
         plt.savefig(f'{output_dir}/{cost_type.lower()}_cost_comparison.png',
                     dpi=300, bbox_inches='tight')
-        plt.show()
-    
+        plt.close()
+
     # Filter data for total costs
     total_data = df[df['product_name'] == 'Total']
     total_data = total_data[total_data['month'].isin(month_order)]
     
-    # Create separate plots for each cost type
+    # Create separate plots for Production and Shipping costs
     cost_types = {
-        'Total': {
-            'columns': ['current_cost', 'base_total_cost', 'base_and_rules_total_cost'],
-            'labels': ['Current Total', 'Base Optimization', 'Base + Rules Optimization']
-        },
         'Production': {
             'columns': ['current_production', 'base_production_cost', 'base_and_rules_production_cost'],
             'labels': ['Current Production', 'Base Optimization', 'Base + Rules Optimization']
@@ -370,24 +358,8 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     for cost_type, config in cost_types.items():
         create_cost_comparison_plot(total_data, cost_type, config['columns'], config['labels'])
     
-    # Filter data for total costs
-    total_data = df[df['product_name'] == 'Total']
-    total_data = total_data[total_data['month'].isin(month_order)]
-    
     # Create progressive total cost comparison plots
     create_progressive_total_cost_plots(total_data, month_order, output_dir)
-    
-    # Create separate plots for Production and Shipping costs
-    cost_types = {
-        'Production': {
-            'columns': ['current_production', 'base_production_cost', 'base_and_rules_production_cost'],
-            'labels': ['Current Production', 'Base Optimization', 'Base + Rules Optimization']
-        },
-        'Shipping': {
-            'columns': ['current_shipping', 'base_shipping_cost', 'base_and_rules_shipping_cost'],
-            'labels': ['Current Shipping', 'Base Optimization', 'Base + Rules Optimization']
-        }
-    }
     
     # Print statistics
     print("\nOptimization Statistics:")
@@ -679,7 +651,7 @@ def optimize_month(df, sheet_name):
     return df
 
 def optimize_all_months(uploaded_file, mappings):
-    """Process all months and return results DataFrame and Excel output"""
+    """Process all months and return key DataFrames for analysis"""
     month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     summaries = []
     monthly_data = []
@@ -709,14 +681,19 @@ def optimize_all_months(uploaded_file, mappings):
 
                 # Adjust capacity if needed
                 df_adjusted, adjustments = adjust_capacity(df)
-                if not adjustments.empty and not all_feasible:
-                    st.write("#### Capacity Adjustments")
-                    st.dataframe(adjustments)
-                    
-                    st.write("#### Final Feasibility Check")
-                    check_feasibility(df_adjusted, mappings)
+                if not adjustments.empty:
+                    if not all_feasible:
+                        st.write("#### Capacity Adjustments")
+                        st.dataframe(adjustments)
+                        st.write("#### Final Feasibility Check")
+                        check_feasibility(df_adjusted, mappings)
                     df = df_adjusted
             
+            # Add plant_code, warehouse_id, and customer_id columns
+            df['product_name'] = df['i'].map(mappings['products'])
+            df['plant_code'] = df['j'].map(mappings['plants'])
+            df['warehouse_id'] = df['k'].map(mappings['warehouses'])
+
             # Run optimization for the current month
             df = optimize_month(df, sheet_name)
             
@@ -728,7 +705,7 @@ def optimize_all_months(uploaded_file, mappings):
             df['current_production'] = df['c^p_{ij}'] * df['x_{ijk}']
             df['current_shipping'] = df['c^l_{ijk}'] * df['x_{ijk}']
             
-            # Store monthly data for Excel export
+            # Store monthly data
             monthly_data.append({'month': month, 'data': df})
             
             # Create product summary
@@ -791,7 +768,7 @@ def optimize_all_months(uploaded_file, mappings):
             
         except Exception as e:
             st.error(f"Error processing {month}: {e}")
-            return None, None
+            return None, None, None
         
         # Update progress
         progress_bar.progress((i + 1) / len(month_order))
@@ -812,97 +789,69 @@ def optimize_all_months(uploaded_file, mappings):
         # Create final DataFrame with annual summary
         results_df = pd.concat([combined, annual_sum], ignore_index=True)
         
-        status_text.text("Creating output file...")
+        # Create percentage summary
+        percentage_summary = combined[combined['product_name'] == 'Total'].copy()
+        percentage_cols = {
+            'base_total_savings': 'Base Total',
+            'base_production_savings': 'Base Production',
+            'base_shipping_savings': 'Base Shipping',
+            'base_and_rules_total_savings': 'Base+Rules Total',
+            'base_and_rules_production_savings': 'Base+Rules Production',
+            'base_and_rules_shipping_savings': 'Base+Rules Shipping'
+        }
         
-        # Create Excel file in memory
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Write monthly sheets
-            for data in monthly_data:
-                data['data'].to_excel(writer, sheet_name=data['month'], index=False)
-            
-            # Write summary sheets
-            cols_to_write = ['month', 'product_name', 
-                           'current_cost', 'current_production', 'current_shipping',
-                           'base_total_cost', 'base_production_cost', 'base_shipping_cost',
-                           'base_total_savings', 'base_production_savings', 'base_shipping_savings',
-                           'base_and_rules_total_cost', 'base_and_rules_production_cost', 'base_and_rules_shipping_cost',
-                           'base_and_rules_total_savings', 'base_and_rules_production_savings', 'base_and_rules_shipping_savings']
-            
-            results_df[cols_to_write].to_excel(writer, sheet_name='Summary', index=False)
-            
-            # Add annual summary to Summary sheet
-            annual_sum[cols_to_write].to_excel(writer, 
-                                           sheet_name='Summary',
-                                           startrow=len(combined) + 3,
-                                           index=False)
-            
-            # Add Percentage Savings sheet
-            percentage_summary = combined[combined['product_name'] == 'Total'].copy()
-            percentage_cols = {
-                'base_total_savings': 'Base Total',
-                'base_production_savings': 'Base Production',
-                'base_shipping_savings': 'Base Shipping',
-                'base_and_rules_total_savings': 'Base+Rules Total',
-                'base_and_rules_production_savings': 'Base+Rules Production',
-                'base_and_rules_shipping_savings': 'Base+Rules Shipping'
-            }
-            
-            for col, name in percentage_cols.items():
-                percentage_summary[f'{name} %'] = (
-                    percentage_summary[col] / percentage_summary['current_cost'] * 100
-                )
-            
-            percentage_cols_to_write = ['month'] + [f'{name} %' for name in percentage_cols.values()]
-            percentage_summary[percentage_cols_to_write].to_excel(
-                writer, sheet_name='Percentage Savings', index=False)
+        for col, name in percentage_cols.items():
+            percentage_summary[f'{name} %'] = (
+                percentage_summary[col] / percentage_summary['current_cost'] * 100
+            )
         
-        output.seek(0)
         status_text.text("Processing complete!")
-        return monthly_data, results_df, output
+        return {
+            'monthly_data': monthly_data,
+            'results_df': results_df,
+            'percentage_summary': percentage_summary,
+            'annual_summary': annual_sum
+        }
     
-    return None, None, None
+    return None
 
-def create_shipping_routes_map(df_plants, df_warehouses, product_id=4, base_only=True, excel_file='Optimization_Results_Monthly.xlsx', sheet_name='Jan', mappings=mappings):
+def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_id=4, base_only=True, month='Jan', mappings=None):
     """
     Create an interactive map showing shipping route changes based on optimization results.
-    Shows all routes where diff_base or diff_base_and_rules != 0 for a specific product.
-    Also displays logistics costs and total costs before and after optimization.
+    Uses monthly_data directly instead of reading from Excel.
     """    
-    # Read optimization results
-    df = pd.read_excel(excel_file, sheet_name=sheet_name)
+    # Get data for specified month
+    month_data = next((data['data'] for data in monthly_data if data['month'] == month), None)
+    if month_data is None:
+        raise ValueError(f"No data found for month: {month}")
     
     # Filter for specific product
-    df_product = df[df['i'] == product_id].copy()
+    df_product = month_data[month_data['i'] == product_id].copy()
     
-    # Get current and optimized costs
-    diff_col = 'diff_base' if base_only else 'diff_base_and_rules'
-    
-    # Filter for non-zero differences
-    routes_df = df_product[abs(df_product[diff_col].astype(int)) > 0].copy()
-    routes_df = routes_df.sort_values(diff_col, key=abs, ascending=False)
-    
-    # Calculate current costs
-    current_ship_cost = (df_product['c^l_{ijk}'] * df_product['x_{ijk}']).sum()
-    current_prod_cost = (df_product['c^p_{ij}'] * df_product['x_{ijk}']).sum()
+    # Calculate costs - using sum() to convert Series to scalar
+    current_ship_cost = ((df_product['c^l_{ijk}'] * df_product['x_{ijk}']).sum())
+    current_prod_cost = ((df_product['c^p_{ij}'] * df_product['x_{ijk}']).sum())
     current_total = current_ship_cost + current_prod_cost
     
     if base_only:
-        # Calculate base optimization costs
-        opt_ship_cost = (df_product['c^l_{ijk}'] * df_product['x^*_{ijk}_base']).sum()
-        opt_prod_cost = (df_product['c^p_{ij}'] * df_product['x^*_{ijk}_base']).sum()
+        opt_ship_cost = ((df_product['c^l_{ijk}'] * df_product['x^*_{ijk}_base']).sum())
+        opt_prod_cost = ((df_product['c^p_{ij}'] * df_product['x^*_{ijk}_base']).sum())
         opt_total = opt_ship_cost + opt_prod_cost
-        diff_col = 'diff_base'
     else:
-        # Calculate base + rules optimization costs
-        opt_ship_cost = (df_product['c^l_{ijk}'] * df_product['x^*_{ijk}_base_and_rules']).sum()
-        opt_prod_cost = (df_product['c^p_{ij}'] * df_product['x^*_{ijk}_base_and_rules']).sum()
+        opt_ship_cost = ((df_product['c^l_{ijk}'] * df_product['x^*_{ijk}_base_and_rules']).sum())
+        opt_prod_cost = ((df_product['c^p_{ij}'] * df_product['x^*_{ijk}_base_and_rules']).sum())
         opt_total = opt_ship_cost + opt_prod_cost
-        diff_col = 'diff_base_and_rules'
     
-    # Add plant and warehouse codes
-    routes_df['plant_code'] = routes_df['j'].map(mappings['plants']).astype(str)
-    routes_df['warehouse_id'] = routes_df['k'].map(mappings['warehouses']).astype(str)
+    # Filter for non-zero differences
+    diff_col = 'diff_base' if base_only else 'diff_base_and_rules'
+    routes_df = df_product[abs(df_product[diff_col]) > 1e-5].copy()
+    routes_df = routes_df.sort_values(diff_col, key=abs, ascending=False)
+    
+    # Ensure all IDs are strings
+    routes_df['plant_code'] = routes_df['plant_code'].astype(str)
+    routes_df['warehouse_id'] = routes_df['warehouse_id'].astype(str)
+    df_plants['Code'] = df_plants['Code'].astype(str)
+    df_warehouses['ID'] = df_warehouses['ID'].astype(str)
     
     # Create reverse lookup for warehouse to customers
     warehouse_customers_dict = defaultdict(list)
@@ -910,17 +859,18 @@ def create_shipping_routes_map(df_plants, df_warehouses, product_id=4, base_only
         warehouse_customers_dict[str(warehouse)].append(customer)
     
     # Add warehouse names and associated customers to routes_df
-    warehouse_names = dict(zip(df_warehouses['ID'], df_warehouses['Name']))
-    routes_df['warehouse_name'] = routes_df['warehouse_id'].map(warehouse_names)
+    routes_df['warehouse_name'] = routes_df['warehouse_id'].map(df_warehouses.set_index('ID')['Name'].get)
     routes_df['associated_customers'] = routes_df['warehouse_id'].map(lambda x: ', '.join(map(str, warehouse_customers_dict[x])))
-
+    
+    # Create mapping dictionaries for coordinates with string keys
+    plant_coords = dict(zip(df_plants['Code'].astype(str), zip(df_plants['lat'], df_plants['lon'])))
+    warehouse_coords = dict(zip(df_warehouses['ID'].astype(str), zip(df_warehouses['lat'], df_warehouses['lon'])))
+    
     # Create base map centered on US
     m = folium.Map(location=[39.8283, -98.5795], zoom_start=5)
     
     # Add plant markers for all plants in the routes
-    plant_coords = dict(zip(df_plants['Code'].astype(str), zip(df_plants['lat'], df_plants['lon'])))
     unique_plants = routes_df['plant_code'].unique()
-    
     for plant_code in unique_plants:
         if plant_code in plant_coords:
             lat, lon = plant_coords[plant_code]
@@ -933,11 +883,11 @@ def create_shipping_routes_map(df_plants, df_warehouses, product_id=4, base_only
                 fillOpacity=0.7,
                 popup=f"Plant: {plant_code}"
             ).add_to(m)
+        else:
+            print(f"Warning: No coordinates found for plant {plant_code}")
     
-    # Add warehouse markers
-    warehouse_coords = dict(zip(df_warehouses['ID'].astype(str), zip(df_warehouses['lat'], df_warehouses['lon'])))
+    # Add warehouse markers for affected warehouses
     affected_warehouses = routes_df['warehouse_id'].unique()
-    
     for wh in affected_warehouses:
         if wh in warehouse_coords:
             lat, lon = warehouse_coords[wh]
@@ -955,6 +905,8 @@ def create_shipping_routes_map(df_plants, df_warehouses, product_id=4, base_only
                 fillOpacity=0.7,
                 popup=folium.Popup(popup_html, max_width=300)
             ).add_to(m)
+        else:
+            print(f"Warning: No coordinates found for warehouse {wh}")
 
     def get_arrow_color(value):
         return 'red' if value < 0 else 'blue'
@@ -976,6 +928,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, product_id=4, base_only
                 locations=[plant_loc, wh_loc],
                 color=get_arrow_color(value),
                 weight=get_arrow_weight(value),
+                popup=None,  # No popup
                 delay=1000,
                 dash_array=[10, 20],
                 opacity=0.7
@@ -993,6 +946,10 @@ def create_shipping_routes_map(df_plants, df_warehouses, product_id=4, base_only
                     html=f'<div style="font-size: 12px; font-weight: bold; color: {get_arrow_color(value)};">{value:.2f} M</div>'
                 )
             ).add_to(m)
+        else:
+            print(f"Warning: Cannot plot route from {plant_code} to {wh} - missing coordinates")
+            print(f"Plant {plant_code} in coords: {plant_code in plant_coords}")
+            print(f"Warehouse {wh} in coords: {wh in warehouse_coords}")
     
     # Add legend with cost summary
     legend_html = f'''
@@ -1054,7 +1011,13 @@ def get_supply_chain_locations():
         ['3145', 'Biagi OKC', 'Oklahoma City', 'OK'],
         ['3156', 'Updike Vacaville', 'Vacaville', 'CA'],
         ['3167', 'Biagi Auburn', 'Auburn', 'WA'],
-        ['3187', 'Biagi Jax 3', 'Jacksonville', 'FL']
+        ['3187', 'Biagi Jax 3', 'Jacksonville', 'FL'],
+        ['3190', 'STC Nashville', 'Nashville', 'IL'],
+        ['3195', 'United Tulsa', 'Tulsa', 'OK'],
+        ['3200', 'NFI Columbus', 'Columbus', 'OH'],
+        ['3201', 'NFI Port Reading', 'Port Reading', 'NJ'],
+        ['3202', 'Biagi Van Nuys', 'Van Nuys', 'CA'],
+        ['3204', 'NFI Distribution', 'Edison', 'NJ']
     ], columns=['ID', 'Name', 'City', 'State'])
 
     def get_coords(city, state):
@@ -1102,7 +1065,13 @@ df_warehouses = pd.DataFrame([
     ['3145', 'Biagi OKC', 'Oklahoma City', 'OK', 35.472989, -97.517054],
     ['3156', 'Updike Vacaville', 'Vacaville', 'CA', 38.356577, -121.987744],
     ['3167', 'Biagi Auburn', 'Auburn', 'WA', 47.307537, -122.230181],
-    ['3187', 'Biagi Jax 3', 'Jacksonville', 'FL', 30.332184, -81.655651]
+    ['3187', 'Biagi Jax 3', 'Jacksonville', 'FL', 30.332184, -81.655651],
+    ['3190', 'STC Nashville', 'Nashville', 'IL', 38.521441, -89.380075],
+    ['3195', 'United Tulsa', 'Tulsa', 'OK', 36.153982, -95.992775],
+    ['3200', 'NFI Columbus', 'Columbus', 'OH', 39.961176, -82.998794],
+    ['3201', 'NFI Port Reading', 'Port Reading', 'NJ', 40.564270, -74.264641],
+    ['3202', 'Biagi Van Nuys', 'Van Nuys', 'CA', 34.189857, -118.451357],
+    ['3204', 'NFI Distribution', 'Edison', 'NJ', 40.518716, -74.412095]
 ], columns=['ID', 'Name', 'City', 'State', 'lat', 'lon'])
 
 # Set page config
@@ -1111,128 +1080,223 @@ st.set_page_config(page_title="AB Supply Chain Optimization", layout="wide")
 # Title
 st.title("AB Supply Chain Optimization and Visualization")
 
-# Create tabs
-tab1, tab2, tab3 = st.tabs(["1. Run Optimization", "2. View Optimization Plots", "3. Visualize Shipping Routes"])
+tab1, tab2, tab3 = st.tabs(["1. Run Optimization", "2. Visualize Results", "3. Visualize Suggested Routes"])
 
 with tab1:
-    st.header("Run Supply Chain Optimization")
+    st.header("Run Production and Shipping Optimization")
     
-    # Use session state to maintain the uploaded file across reruns
-    if 'uploaded_file' not in st.session_state:
-        st.session_state['uploaded_file'] = None
-    
+    # Use session state to maintain data across reruns
+    if 'optimization_results' not in st.session_state:
+        st.session_state['optimization_results'] = None
+        st.session_state['monthly_data'] = None
+        st.session_state['results_df'] = None
+
     uploaded_file = st.file_uploader("Upload Solver_Sales_Monthly.xlsx", type=['xlsx'])
-    if uploaded_file is not None:
-        st.session_state['uploaded_file'] = uploaded_file
     
-    if st.session_state['uploaded_file'] is not None:
+    if uploaded_file is not None:
         if st.button("Run Optimization"):
             with st.spinner("Running optimization for all months..."):
-                monthly_data, results_df, output = optimize_all_months(st.session_state['uploaded_file'], mappings)
-                
-                if results_df is not None:
-                    # Store results in session state
-                    st.session_state['monthly_data'] = monthly_data
-                    st.session_state['processed_results'] = results_df
-                    st.session_state['optimization_results'] = output
-                    st.session_state['optimization_complete'] = True
+                try:
+                    # Run optimization
+                    results = optimize_all_months(uploaded_file, mappings)
                     
-                    st.success("Optimization complete!")
+                    if results is not None:
+                        # Create BytesIO object for Excel file
+                        output = io.BytesIO()
+                        
+                        # Save results to Excel file in memory
+                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                            # Save monthly data sheets
+                            for monthly_data in results['monthly_data']:
+                                monthly_data['data'].to_excel(writer, 
+                                    sheet_name=f"Data-{monthly_data['month']}", 
+                                    index=False)
+                            
+                            # Save summary sheets
+                            results['results_df'].to_excel(writer, sheet_name='Summary', index=False)
+                            results['percentage_summary'].to_excel(writer, sheet_name='Percentage Summary', index=False)
+                            results['annual_summary'].to_excel(writer, sheet_name='Annual Summary', index=False)
+                        
+                        output.seek(0)  # Reset file pointer to beginning
+                        
+                        # Store results in session state
+                        st.session_state['optimization_results'] = output
+                        st.session_state['monthly_data'] = results['monthly_data']
+                        st.session_state['results_df'] = results['results_df']
+                        
+                        # Display optimization summary
+                        st.success("Optimization complete!")
+                        
+                        # Display overall statistics
+                        with st.expander("View Optimization Statistics", expanded=True):
+                            annual_summary = results['annual_summary']
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric(
+                                    "Total Base Optimization Savings", 
+                                    format_number(annual_summary['base_total_savings'].iloc[0])
+                                )
+                            with col2:
+                                st.metric(
+                                    "Total Base + Rules Optimization Savings",
+                                    format_number(annual_summary['base_and_rules_total_savings'].iloc[0])
+                                )
+                    else:
+                        st.error("Optimization failed. Please check your input data.")
+                except Exception as e:
+                    st.error(f"An error occurred during optimization: {str(e)}")
     
-    # Show download button if optimization is complete
-    if 'optimization_complete' in st.session_state and st.session_state['optimization_complete']:
-        output_for_download = io.BytesIO(st.session_state['optimization_results'].getvalue())
+    # Show download button if optimization results exist
+    if st.session_state['optimization_results'] is not None:
         st.download_button(
             label="Download Results",
-            data=output_for_download,
+            data=st.session_state['optimization_results'].getvalue(),
             file_name="Optimization_Results_Monthly.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
 with tab2:
-    st.header("Optimization Analysis Plots")
+    st.header("Visualize Optimization Results")
     
-    if 'optimization_results' not in st.session_state:
+    if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
         st.warning("Please run optimization first in the 'Run Optimization' tab.")
     else:
-        # Create placeholder for plots
-        plot_container = st.container()
-        
-        with plot_container:
-            st.subheader("Generating optimization analysis plots...")
+        try:
+            # Create placeholder for plots
+            plot_container = st.container()
             
-            # Reset file pointer and read Summary sheet
-            st.session_state['optimization_results'].seek(0)
-            results_df = st.session_state['processed_results']
-            
-            # Generate plots
-            create_optimization_plots(results_df, "./")
-            
-            # Display plots in columns
-            col1, col2 = st.columns(2)
+            with plot_container:
+                st.subheader("Generating optimization analysis plots...")
+                
+                # Reset file pointer and read Summary sheet
+                st.session_state['optimization_results'].seek(0)
+                results_df = st.session_state['results_df']
+                
+                # Generate plots
+                create_optimization_plots(results_df, "./")
+                
+                # Display plots in columns
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    try:
+                        st.image("total_cost_current.png")
+                        st.image("total_cost_all.png")
+                        st.image("production_cost_comparison.png")
+                        st.image("savings_comparison_by_month.png")
+                    except Exception as e:
+                        st.error(f"Error loading cost comparison plots: {str(e)}")
+                
+                with col2:
+                    try:
+                        st.image("total_cost_current_base.png")
+                        st.image("shipping_cost_comparison.png")
+                        st.image("savings_comparison_by_product.png")
+                    except Exception as e:
+                        st.error(f"Error loading savings comparison plots: {str(e)}")
+        except Exception as e:
+            st.error(f"Error generating visualization: {str(e)}")
+                
+with tab3:
+    st.header("Visualize Suggested Shipping Routes")
+    
+    if 'optimization_results' not in st.session_state or st.session_state['optimization_results'] is None:
+        st.warning("Please run optimization first in the 'Run Optimization' tab.")
+    else:
+        try:
+            col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.image("savings_comparison_by_product.png")
-                st.image("total_cost_current.png")
-                st.image("shipping_cost_comparison.png")
+                selected_product = st.selectbox(
+                    "Select Product",
+                    options=sorted(list(mappings['products'].values())),
+                    index=3  # Default to Lids
+                )
+                product_id = {v: k for k, v in mappings['products'].items()}[selected_product]
             
             with col2:
-                st.image("savings_comparison_by_month.png")
-                st.image("total_cost_all.png")
-                st.image("production_cost_comparison.png")
-
-# Tab 3 - Shipping Routes
-with tab3:
-    st.header("Visualize Shipping Routes")
-    
-    if 'optimization_results' not in st.session_state:
-        st.warning("Please run optimization first in the 'Run Optimization' tab.")
-    else:
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            selected_product = st.selectbox(
-                "Select Product",
-                options=list(mappings['products'].values()),
-                index=3  # Default to Lids
-            )
-            product_id = {v: k for k, v in mappings['products'].items()}[selected_product]
-        
-        with col2:
-            selected_month = st.selectbox(
-                "Select Month",
-                options=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            )
-        
-        with col3:
-            base_only = st.radio(
-                "Optimization Type",
-                options=["Base Only", "Base + Rules"],
-                index=0
-            ) == "Base Only"
-        
-        if st.button("Generate Visualization"):
-            try:
-                # Reset the file pointer before reading
-                st.session_state['optimization_results'].seek(0)
-                
-                shipping_routes_map, routes_df = create_shipping_routes_map(
-                    df_plants,
-                    df_warehouses,
-                    product_id=product_id,
-                    base_only=base_only,
-                    excel_file=st.session_state['optimization_results'],  # Use the BytesIO object
-                    sheet_name=selected_month,  # Use the selected month
-                    mappings=mappings
+                selected_month = st.selectbox(
+                    "Select Month",
+                    options=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
                 )
-                
-                st.components.v1.html(shipping_routes_map._repr_html_(), height=600)
-                
-                st.header("Route Changes")
-                st.dataframe(routes_df[['plant_code', 'warehouse_id', 'warehouse_name', 'associated_customers', 'diff_base' if base_only else 'diff_base_and_rules']])
-                
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
+            
+            with col3:
+                base_only = st.radio(
+                    "Optimization Type",
+                    options=["Base Only", "Base + Rules"],
+                    index=0
+                ) == "Base Only"
+            
+            # Inside the Tab3 block, update the visualization code:
+            if st.button("Generate Visualization"):
+                try:
+                    with st.spinner("Generating shipping routes visualization..."):
+                        monthly_data = st.session_state['monthly_data']
+                        
+                        # Debug info
+                        st.write(f"Generating visualization for Product {product_id} ({selected_product}) - {selected_month}")
+                        
+                        # Verify data
+                        month_data = next((data['data'] for data in monthly_data if data['month'] == selected_month), None)
+                        if month_data is None:
+                            st.error(f"No data found for month: {selected_month}")
+                            st.stop()
+                            
+                        # Filter for specific product and verify data exists
+                        df_product = month_data[month_data['i'] == product_id].copy()
+                        if df_product.empty:
+                            st.error(f"No data found for product {selected_product} in {selected_month}")
+                            st.stop()
+                        
+                        # Calculate costs first to verify data
+                        current_ship_cost = (df_product['c^l_{ijk}'] * df_product['x_{ijk}']).sum()
+                        current_prod_cost = (df_product['c^p_{ij}'] * df_product['x_{ijk}']).sum()
+                        current_total = current_ship_cost + current_prod_cost
+                        
+                        # Generate map and routes
+                        shipping_routes_map, routes_df = create_shipping_routes_map(
+                            df_plants, 
+                            df_warehouses, 
+                            monthly_data,
+                            product_id=product_id, 
+                            base_only=base_only, 
+                            month=selected_month, 
+                            mappings=mappings
+                        )
+                        
+                        # Display the map
+                        st.components.v1.html(shipping_routes_map._repr_html_(), height=600)
+                        
+                        # Display route changes if available
+                        if not routes_df.empty:
+                            st.header("Suggested Route Changes")
+                            diff_col = 'diff_base' if base_only else 'diff_base_and_rules'
+                            display_cols = ['plant_code', 'warehouse_id', 'warehouse_name', 'associated_customers', diff_col]
+                            
+                            # Format the differences for better readability
+                            routes_display = routes_df[display_cols].copy()
+                            routes_display[diff_col] = routes_display[diff_col].round(3)
+                            
+                            # Create a styled dataframe
+                            def style_diff(val):
+                                if pd.isna(val):
+                                    return ''
+                                color = 'red' if float(val) < 0 else 'green'
+                                return f'color: {color}'
+                            
+                            styled_df = routes_display.style.map(style_diff, subset=[diff_col])
+                            st.dataframe(styled_df)
+                        else:
+                            st.info("No route changes found for the selected criteria.")
+                            
+                except Exception as e:
+                    st.error(f"Error generating shipping routes visualization: {str(e)}")
+                    st.write("Error details:", str(e))
+                    import traceback
+                    st.code(traceback.format_exc())
+        except Exception as e:
+            st.error(f"Error setting up shipping routes tab: {str(e)}")
 
 # Add instructions
 with st.sidebar:
