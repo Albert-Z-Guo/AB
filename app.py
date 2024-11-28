@@ -814,6 +814,138 @@ def optimize_all_months(uploaded_file, mappings):
     
     return None
 
+def create_supply_chain_map(plants, warehouses):
+    """Creates and displays an interactive supply chain network map in Jupyter"""
+    # Create map and add style
+    m = folium.Map(location=[39.8, -91], zoom_start=4)
+    
+    # Custom popup style
+    popup_style = """
+    <style>
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border-radius: 5px;
+            padding: 1px;
+            width: auto !important;
+            min-width: 200px;
+        }
+        .custom-popup .leaflet-popup-content {
+            margin: 10px;
+            line-height: 1.4;
+        }
+        .custom-popup .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.95);
+        }
+    </style>
+    """
+    m.get_root().header.add_child(folium.Element(popup_style))
+
+    # Create markers
+    def create_marker(location, popup, shape='hex', color='#d73027'):
+        return folium.RegularPolygonMarker(location=location, popup=popup, number_of_sides={'square':4,'triangle':3,'hex':6}[shape],
+                                         radius=12 if shape!='hex' else 6, color=color, fill_color=color, fill_opacity=0.5,
+                                         weight=2, rotation=45 if shape=='square' else 0)
+
+    # Add markers
+    for _, p in plants.iterrows():
+        if pd.notna(p['lat']):
+            popup = folium.Popup(f"""<div style='font-family:Arial,sans-serif;min-width:180px'>
+                                <strong>{p['City']} ({p['Code']})</strong><br>Plant #{p['Plant #']}<br>{p['Type']} Plant</div>""", max_width=300)
+            popup._name = popup._name.replace('popup','custom-popup')
+            create_marker([p['lat'],p['lon']], popup, 'square' if p['Type']=='Can' else 'triangle', 
+                        '#2c5aa0' if p['Type']=='Can' else '#4d9221').add_to(m)
+
+    for _, w in warehouses.iterrows():
+        if pd.notna(w['lat']):
+            popup = folium.Popup(f"""<div style='font-family:Arial,sans-serif;min-width:180px'>
+                                <strong>{w['Name']}</strong><br>Warehouse #{w['ID']}<br>{w['City']}, {w['State']}</div>""", max_width=300)
+            popup._name = popup._name.replace('popup','custom-popup')
+            create_marker([w['lat'],w['lon']], popup).add_to(m)
+
+    # Legend HTML - using percentage positioning
+    legend_html = """
+    <div style="position: fixed; 
+                top: 15px; left: 50px;
+                border: 2px solid grey; 
+                z-index: 1000;
+                background-color: white;
+                padding: 6px;
+                font-family: Arial;
+                font-size: 11px;
+                opacity: 0.9">
+        <div style="margin-bottom: 5px"><strong>AB Supply Chain Network</strong></div>
+        <div style="margin-bottom: 3px">
+            <svg height="15" width="15">
+                <rect x="2" y="2" width="10" height="10" 
+                      transform="rotate(45 7 7)"
+                      fill="#2c5aa0" fill-opacity="0.3" 
+                      stroke="#2c5aa0" stroke-opacity="0.4"/>
+            </svg> Can Plant
+        </div>
+        <div style="margin-bottom: 3px">
+            <svg height="15" width="15">
+                <polygon points="7,2 13,12 1,12"
+                         fill="#4d9221" fill-opacity="0.3" 
+                         stroke="#4d9221" stroke-opacity="0.4"/>
+            </svg> Lid Plant
+        </div>
+        <div>
+            <svg height="15" width="15">
+                <polygon points="7,2 12,5 12,10 7,13 2,10 2,5"
+                         fill="#d73027" fill-opacity="0.3" 
+                         stroke="#d73027" stroke-opacity="0.4"/>
+            </svg> Warehouse
+        </div>
+    </div>
+    """
+
+    # Tables HTML - also using percentage positioning
+    tables_html = f"""
+    <div style="position: fixed; 
+                top: 15px; right: 10px;
+                width: 350px;
+                border: 2px solid grey; 
+                z-index: 1000;
+                background-color: white;
+                padding: 6px;
+                font-family: Arial;
+                font-size: 12px;
+                opacity: 0.9">
+        <div style="margin-bottom: 3px"><strong>Manufacturing Plants</strong></div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px">
+            <tr style="background-color: #f0f0f0">
+                <th style="border: 1px solid #ddd; padding: 2px">Plant #</th>
+                <th style="border: 1px solid #ddd; padding: 2px">Code</th>
+                <th style="border: 1px solid #ddd; padding: 2px">Location</th>
+                <th style="border: 1px solid #ddd; padding: 2px">Type</th>
+            </tr>
+            {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['Plant #']}</td>"
+                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Code']}</td>"
+                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td>"
+                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Type']}</td></tr>" 
+                     for _, row in plants.iterrows())}
+        </table>
+        <div style="margin-bottom: 3px"><strong>Warehouses</strong></div>
+        <table style="width: 100%; border-collapse: collapse">
+            <tr style="background-color: #f0f0f0">
+                <th style="border: 1px solid #ddd; padding: 2px">Warehouse #</th>
+                <th style="border: 1px solid #ddd; padding: 2px">Name</th>
+                <th style="border: 1px solid #ddd; padding: 2px">Location</th>
+            </tr>
+            {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['ID']}</td>"
+                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Name']}</td>"
+                     f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td></tr>" 
+                     for _, row in warehouses.iterrows())}
+        </table>
+    </div>
+    """
+
+    # Add legend and tables to map
+    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().html.add_child(folium.Element(tables_html))
+    return m
+
 def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_id=4, base_only=True, month='Jan', mappings=None):
     """
     Create an interactive map showing shipping route changes based on optimization results.
@@ -1073,6 +1205,43 @@ df_warehouses = pd.DataFrame([
     ['3204', 'NFI Distribution', 'Edison', 'NJ', 40.518716, -74.412095]
 ], columns=['ID', 'Name', 'City', 'State', 'lat', 'lon'])
 
+def validate_uploaded_file(uploaded_file):
+    """
+    Validate the uploaded Excel file for:
+    1. Existence of required sheets for all months.
+    2. Presence of required columns in each sheet.
+    
+    Args:
+        uploaded_file: The uploaded Excel file.
+        
+    Returns:
+        bool: True if the file is valid, False otherwise.
+        str: Error message if invalid, empty string otherwise.
+    """
+    required_columns = ['c^p_{ij}', 'c^l_{ijk}', 'D_{ik}', 'C_{ij}']
+    required_sheets = [f'Solver-{month}' for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']]
+    
+    try:
+        # Load the Excel file
+        excel_data = pd.ExcelFile(uploaded_file)
+        missing_sheets = [sheet for sheet in required_sheets if sheet not in excel_data.sheet_names]
+        
+        if missing_sheets:
+            return False, f"Missing required sheets: {', '.join(missing_sheets)}"
+        
+        # Check for required columns in each sheet
+        for sheet in required_sheets:
+            sheet_data = pd.read_excel(excel_data, sheet_name=sheet)
+            missing_columns = [col for col in required_columns if col not in sheet_data.columns]
+            
+            if missing_columns:
+                return False, f"Missing required columns in sheet '{sheet}': {', '.join(missing_columns)}"
+        
+        return True, ""  # File is valid
+    except Exception as e:
+        return False, f"Error reading the file: {str(e)}"
+    
 # Set page config
 st.set_page_config(page_title="AB Supply Chain Optimization", layout="wide")
 
@@ -1083,6 +1252,13 @@ tab1, tab2, tab3 = st.tabs(["1. Run Optimization", "2. Visualize Results", "3. V
 
 with tab1:
     st.header("Run Production and Shipping Optimization")
+
+    # Display the supply chain map
+    try:
+        supply_chain_map = create_supply_chain_map(df_plants, df_warehouses)
+        st.components.v1.html(supply_chain_map._repr_html_(), height=800)
+    except Exception as e:
+        st.error(f"Error generating supply chain map: {str(e)}")
     
     # Use session state to maintain data across reruns
     if 'optimization_results' not in st.session_state:
@@ -1093,42 +1269,47 @@ with tab1:
     uploaded_file = st.file_uploader("Upload Solver_Sales_Monthly.xlsx", type=['xlsx'])
     
     if uploaded_file is not None:
-        if st.button("Run Optimization"):
-            with st.spinner("Running optimization for all months..."):
-                try:
-                    # Run optimization
-                    results = optimize_all_months(uploaded_file, mappings)
-                    
-                    if results is not None:
-                        # Create BytesIO object for Excel file
-                        output = io.BytesIO()
+        # Validate the file
+        is_valid, error_message = validate_uploaded_file(uploaded_file)
+        if not is_valid:
+            st.error(f"File validation failed: {error_message}")
+        else:
+            if st.button("Run Optimization"):
+                with st.spinner("Running optimization for all months..."):
+                    try:
+                        # Run optimization
+                        results = optimize_all_months(uploaded_file, mappings)
                         
-                        # Save results to Excel file in memory
-                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            # Save monthly data sheets
-                            for monthly_data in results['monthly_data']:
-                                monthly_data['data'].to_excel(writer, 
-                                    sheet_name=f"Data-{monthly_data['month']}", 
-                                    index=False)
+                        if results is not None:
+                            # Create BytesIO object for Excel file
+                            output = io.BytesIO()
                             
-                            # Save summary sheets
-                            results['results_df'].to_excel(writer, sheet_name='Summary', index=False)
-                            results['percentage_summary'].to_excel(writer, sheet_name='Percentage Summary', index=False)
-                            results['annual_summary'].to_excel(writer, sheet_name='Annual Summary', index=False)
-                        
-                        output.seek(0)  # Reset file pointer to beginning
-                        
-                        # Store results in session state
-                        st.session_state['optimization_results'] = output
-                        st.session_state['monthly_data'] = results['monthly_data']
-                        st.session_state['results'] = results
-                        
-                        # Display optimization summary
-                        st.success("Optimization complete!")
-                    else:
-                        st.error("Optimization failed. Please check your input data.")
-                except Exception as e:
-                    st.error(f"An error occurred during optimization: {str(e)}")
+                            # Save results to Excel file in memory
+                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                # Save monthly data sheets
+                                for monthly_data in results['monthly_data']:
+                                    monthly_data['data'].to_excel(writer, 
+                                        sheet_name=f"Data-{monthly_data['month']}", 
+                                        index=False)
+                                
+                                # Save summary sheets
+                                results['results_df'].to_excel(writer, sheet_name='Summary', index=False)
+                                results['percentage_summary'].to_excel(writer, sheet_name='Percentage Summary', index=False)
+                                results['annual_summary'].to_excel(writer, sheet_name='Annual Summary', index=False)
+                            
+                            output.seek(0)  # Reset file pointer to beginning
+                            
+                            # Store results in session state
+                            st.session_state['optimization_results'] = output
+                            st.session_state['monthly_data'] = results['monthly_data']
+                            st.session_state['results'] = results
+                            
+                            # Display optimization summary
+                            st.success("Optimization complete!")
+                        else:
+                            st.error("Optimization failed. Please check your input data.")
+                    except Exception as e:
+                        st.error(f"An error occurred during optimization: {str(e)}")
     
     # Show download button if optimization results exist
     if st.session_state['optimization_results'] is not None:
@@ -1178,7 +1359,7 @@ with tab2:
                         st.error(f"Error loading savings comparison plots: {str(e)}")
             
             # Display overall statistics
-            st.header("View Optimization Statistics")
+            st.header("Optimization Statistics")
             # Extract annual summary
             annual_summary = st.session_state['results']['annual_summary']
             
