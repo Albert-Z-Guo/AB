@@ -829,8 +829,8 @@ def create_supply_chain_map(plants, warehouses):
                 Type: {p['Type']} Plant"""
             icon_color = 'blue' if p['Type'] == 'Can' else 'red'
             folium.Marker(
-                location=[p['lat'] + (np.random.random() - 0.5) * 0.1,  # Add random noise to avoid display overlap 
-                         p['lon'] + (np.random.random() - 0.5) * 0.1],
+                location=[p['lat'] + np.random.uniform(-0.005, 0.005),  
+                          p['lon'] + np.random.uniform(-0.005, 0.005)], # Add random noise to avoid display overlap 
                 icon=folium.Icon(color=icon_color, icon='industry', prefix='fa'),
                 popup=folium.Popup(popup_html, max_width=300),
                 # opacity=0.9
@@ -842,8 +842,8 @@ def create_supply_chain_map(plants, warehouses):
             popup_html = f"""<b>Warehouse: {w['ID']}</b><br>
                 Name: {w['Name']}, {w['City']}, {w['State']}"""
             folium.Marker(
-                location=[w['lat'] + (np.random.random() - 0.5) * 0.1,  # Add random noise to avoid display overlap 
-                         w['lon'] + (np.random.random() - 0.5) * 0.1],
+                location=[w['lat'] + np.random.uniform(-0.005, 0.005), 
+                          w['lon'] + np.random.uniform(-0.005, 0.005)], # Add random noise to avoid display overlap 
                 icon=folium.Icon(color='green', icon='warehouse', prefix='fa'),
                 popup=folium.Popup(popup_html, max_width=300),
                 opacity=0.7
@@ -957,6 +957,12 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     routes_df['warehouse_id'] = routes_df['warehouse_id'].astype(str)
     df_plants['Code'] = df_plants['Code'].astype(str)
     df_warehouses['ID'] = df_warehouses['ID'].astype(str)
+
+    # Add random noise to coordinates to avoid overlap
+    df_plants['lat'] += np.random.uniform(-0.005, 0.005, size=len(df_plants))
+    df_plants['lon'] += np.random.uniform(-0.005, 0.005, size=len(df_plants))
+    df_warehouses['lat'] += np.random.uniform(-0.005, 0.005, size=len(df_warehouses))
+    df_warehouses['lon'] += np.random.uniform(-0.005, 0.005, size=len(df_warehouses))
     
     # Create reverse lookup for warehouse to customers
     warehouse_customers_dict = defaultdict(list)
@@ -968,8 +974,8 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     routes_df['associated_customers'] = routes_df['warehouse_id'].map(lambda x: ', '.join(map(str, warehouse_customers_dict[x])))
     
     # Prepare mappings for coordinates
-    plant_coords = dict(zip(df_plants['Code'].astype(str), zip(df_plants['lat'], df_plants['lon'])))
-    warehouse_coords = dict(zip(df_warehouses['ID'].astype(str), zip(df_warehouses['lat'], df_warehouses['lon'])))
+    plant_coords = dict(zip(df_plants['Code'], zip(df_plants['lat'], df_plants['lon'])))
+    warehouse_coords = dict(zip(df_warehouses['ID'], zip(df_warehouses['lat'], df_warehouses['lon'])))
     
     # Create the map centered on the US
     m = folium.Map(location=[30, -98.5795], zoom_start=5)
