@@ -138,7 +138,7 @@ def create_progressive_total_cost_plots(data, month_order, output_dir):
         # Save plot
         plt.savefig(f"{output_dir}/{plot_config['filename']}", 
                    dpi=300, bbox_inches='tight')
-        plt.show()
+        plt.close()
 
 def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     """
@@ -582,7 +582,6 @@ def test_and_apply_constraints(df, x, constraints, base_constraints, objective):
             problem = cp.Problem(objective, test_constraints)
             problem.solve()
             
-            print(f"Adding {c['name']}: {'feasible' if problem.status == 'optimal' else problem.status}")
             if problem.status == 'optimal':
                 working_constraints.extend(c["constraints"])
             else:
@@ -867,7 +866,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     warehouse_coords = dict(zip(df_warehouses['ID'].astype(str), zip(df_warehouses['lat'], df_warehouses['lon'])))
     
     # Create base map centered on US
-    m = folium.Map(location=[39.8283, -98.5795], zoom_start=5)
+    m = folium.Map(location=[30, -98.5795], zoom_start=5)
     
     # Add plant markers for all plants in the routes
     unique_plants = routes_df['plant_code'].unique()
@@ -1166,9 +1165,7 @@ with tab2:
             # Create placeholder for plots
             plot_container = st.container()
             
-            with plot_container:
-                st.subheader("Generating optimization analysis plots...")
-                
+            with plot_container:                
                 # Reset file pointer and read Summary sheet
                 st.session_state['optimization_results'].seek(0)
                 results_df = st.session_state['results_df']
@@ -1197,7 +1194,7 @@ with tab2:
                         st.error(f"Error loading savings comparison plots: {str(e)}")
         except Exception as e:
             st.error(f"Error generating visualization: {str(e)}")
-                
+
 with tab3:
     st.header("Visualize Suggested Shipping Routes")
     
@@ -1210,8 +1207,8 @@ with tab3:
             with col1:
                 selected_product = st.selectbox(
                     "Select Product",
-                    options=sorted(list(mappings['products'].values())),
-                    index=3  # Default to Lids
+                    options=list(mappings['products'].values()),
+                    index=3 # Default to Lids
                 )
                 product_id = {v: k for k, v in mappings['products'].items()}[selected_product]
             
@@ -1228,14 +1225,12 @@ with tab3:
                     index=0
                 ) == "Base Only"
             
-            # Inside the Tab3 block, update the visualization code:
             if st.button("Generate Visualization"):
                 try:
                     with st.spinner("Generating shipping routes visualization..."):
                         monthly_data = st.session_state['monthly_data']
                         
-                        # Debug info
-                        st.write(f"Generating visualization for Product {product_id} ({selected_product}) - {selected_month}")
+                        st.write(f"Routes for {selected_product} in {selected_month} under {'Base Only' if base_only else 'Base + Rules'} optimization:")
                         
                         # Verify data
                         month_data = next((data['data'] for data in monthly_data if data['month'] == selected_month), None)
@@ -1249,11 +1244,6 @@ with tab3:
                             st.error(f"No data found for product {selected_product} in {selected_month}")
                             st.stop()
                         
-                        # Calculate costs first to verify data
-                        current_ship_cost = (df_product['c^l_{ijk}'] * df_product['x_{ijk}']).sum()
-                        current_prod_cost = (df_product['c^p_{ij}'] * df_product['x_{ijk}']).sum()
-                        current_total = current_ship_cost + current_prod_cost
-                        
                         # Generate map and routes
                         shipping_routes_map, routes_df = create_shipping_routes_map(
                             df_plants, 
@@ -1265,18 +1255,17 @@ with tab3:
                             mappings=mappings
                         )
                         
-                        # Display the map
-                        st.components.v1.html(shipping_routes_map._repr_html_(), height=600)
-                        
                         # Display route changes if available
                         if not routes_df.empty:
-                            st.header("Suggested Route Changes")
+                            # Display the map
+                            st.components.v1.html(shipping_routes_map._repr_html_(), height=600)
+
+                            st.header("Suggested Shipping Routes Details")
                             diff_col = 'diff_base' if base_only else 'diff_base_and_rules'
                             display_cols = ['plant_code', 'warehouse_id', 'warehouse_name', 'associated_customers', diff_col]
-                            
-                            # Format the differences for better readability
                             routes_display = routes_df[display_cols].copy()
-                            routes_display[diff_col] = routes_display[diff_col].round(3)
+                            routes_display[diff_col] = routes_display[diff_col].apply(lambda x: f"+{float(x):.3f}" if float(x) > 0 else f"{float(x):.3f}")
+                            routes_display.columns = ['Plant Code', 'Warehouse #', 'Warehouse Name', 'Warehouse Customers', 'Shipment Adjustment (Million Units)'] # rename columns
                             
                             # Create a styled dataframe
                             def style_diff(val):
@@ -1285,7 +1274,7 @@ with tab3:
                                 color = 'red' if float(val) < 0 else 'green'
                                 return f'color: {color}'
                             
-                            styled_df = routes_display.style.map(style_diff, subset=[diff_col])
+                            styled_df = routes_display.reset_index(drop=True).style.map(style_diff, subset=['Shipment Adjustment (Million Units)'])
                             st.dataframe(styled_df)
                         else:
                             st.info("No route changes found for the selected criteria.")
@@ -1295,6 +1284,7 @@ with tab3:
                     st.write("Error details:", str(e))
                     import traceback
                     st.code(traceback.format_exc())
+
         except Exception as e:
             st.error(f"Error setting up shipping routes tab: {str(e)}")
 
@@ -1312,4 +1302,16 @@ with st.sidebar:
         2. Choose a month to analyze
         3. Select the optimization type
         4. Click "Generate Visualization" to update the map
+                 
+        ### Step 3: Visualize Suggested Shipping Routes
+        1. Select the product you wish to analyze using the dropdown menu.
+        2. Choose the month of interest.
+        3. Select the optimization type: "Base Only" or "Base + Rules."
+        4. Click "Generate Visualization" to create an interactive map.
+        5. Analyze suggested route changes:
+           - Increased volumes are shown in **blue** lines.
+           - Decreased volumes are shown in **red** lines.
+           - Line thickness reflects the magnitude of changes.
+        6. Scroll down to review a detailed table of changes, highlighting:
+           - Plants, warehouses, customers, and volume differences.
         """)
