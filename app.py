@@ -919,22 +919,6 @@ def create_supply_chain_map(plants, warehouses):
         </div>
     """
 
-    resize_script = """
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                function adjustTableHeight() {
-                    const mapHeight = document.querySelector('.leaflet-container')?.clientHeight || window.innerHeight;
-                    const tableContainer = document.getElementById('table-container');
-                    if (tableContainer) {
-                        tableContainer.style.maxHeight = (mapHeight - 30) + 'px';
-                    }
-                }
-                window.addEventListener('resize', adjustTableHeight);
-                adjustTableHeight();
-            });
-        </script>
-    """
-
     # Add legend, table, and resize script to the map
     m.get_root().html.add_child(folium.Element(legend_html))
     m.get_root().html.add_child(folium.Element(tables_html))
