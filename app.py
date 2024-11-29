@@ -875,18 +875,21 @@ def create_supply_chain_map(plants, warehouses):
         """
 
     tables_html = f"""
-        <div style="position: fixed; 
-                    top: 15px; right: 10px;
-                    max-width: 90%; /* Adjust width to be responsive */
+        <div id="table-container" style="
+                    position: fixed; 
+                    top: 15px; right: 15px;
+                    max-width: 90%; 
                     border: 2px solid grey; 
-                    z-index: 1000;
+                    z-index: 9999; 
                     background-color: white;
                     padding: 6px;
                     font-family: Arial;
-                    font-size: calc(0.8vw); /* Responsive font size */
+                    font-size: 12px;
                     opacity: 0.9;
-                    overflow: auto; /* Enable scrolling if needed */
-                    box-sizing: border-box;">
+                    overflow: auto; 
+                    box-sizing: border-box;
+                    max-height: calc(100vh - 30px); /* Dynamically adjusts to viewport height */
+                    overflow-y: auto;">
             <div style="margin-bottom: 3px"><strong>Manufacturing Plants</strong></div>
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px">
                 <tr style="background-color: #f0f0f0">
@@ -916,7 +919,23 @@ def create_supply_chain_map(plants, warehouses):
         </div>
     """
 
-    # Add legend and tables to map
+    resize_script = """
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                function adjustTableHeight() {
+                    const mapHeight = document.querySelector('.leaflet-container')?.clientHeight || window.innerHeight;
+                    const tableContainer = document.getElementById('table-container');
+                    if (tableContainer) {
+                        tableContainer.style.maxHeight = (mapHeight - 30) + 'px';
+                    }
+                }
+                window.addEventListener('resize', adjustTableHeight);
+                adjustTableHeight();
+            });
+        </script>
+    """
+
+    # Add legend, table, and resize script to the map
     m.get_root().html.add_child(folium.Element(legend_html))
     m.get_root().html.add_child(folium.Element(tables_html))
     return m
