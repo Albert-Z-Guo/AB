@@ -1,10 +1,10 @@
 import io
 from collections import defaultdict
+import traceback
 from typing import Tuple
 
 import cvxpy as cp
 import folium
-from folium import plugins
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 import matplotlib.pyplot as plt
@@ -16,14 +16,51 @@ import streamlit as st
 # Define mappings
 mappings = {
     'products': {1: "12 oz", 2: "12 oz Sleek", 3: "16 oz", 4: "Lids", 5: "25 oz", 6: "16 BT"},
-    'plants': {1: "MIR", 2: "JAX", 3: "RIV", 4: "ARN", 5: "OKC", 6: "NBG", 7: "WIN"},
-    'warehouses': {i: wh for i, wh in enumerate([3112, 3115, 3139, 3070, 3005, 3095, 3083, 3145, 3204, 3187, 3156, 3177, 3198, 3125, 3195, 3167], 1)},
+    
+    'plants': {
+        1: {"#": "5112", "code": "MIR", "city": "Mira Loma", "state": "CA", "type": "Can"},
+        2: {"#": "5101", "code": "JAX", "city": "Jacksonville", "state": "FL", "type": "Can"},
+        3: {"#": "5208", "code": "RIV", "city": "Riverside", "state": "CA", "type": "Lid"},
+        4: {"#": "5103", "code": "ARN", "city": "Arnold", "state": "MO", "type": "Can"},
+        5: {"#": "5205", "code": "OKC", "city": "Oklahoma City", "state": "OK", "type": "Lid"},
+        6: {"#": "5109", "code": "NBG", "city": "Newburgh", "state": "NY", "type": "Can"},
+        7: {"#": "5107", "code": "WIN", "city": "Windsor", "state": "CO", "type": "Can"}
+    },
+    
+    'warehouses': {
+        1: {"#": "3112", "name": "Biagi Ontario", "city": "Ontario", "state": "CA", "lat": 34.065846, "lon": -117.648430},
+        2: {"#": "3115", "name": "NFI Newburgh", "city": "Newburgh", "state": "NY", "lat": 41.503427, "lon": -74.010418},
+        3: {"#": "3139", "name": "TMSI-Windsor", "city": "Windsor", "state": "CO", "lat": 40.477482, "lon": -104.901361},
+        4: {"#": "3070", "name": "Stitch-Tec 1st Street", "city": "St. Louis", "state": "MO", "lat": 38.628028, "lon": -90.191015},
+        5: {"#": "3005", "name": "Biagi Jax 2", "city": "Jacksonville", "state": "FL", "lat": 30.332184, "lon": -81.655651},
+        6: {"#": "3095", "name": "Buske Houston", "city": "Houston", "state": "TX", "lat": 29.758938, "lon": -95.367697},
+        7: {"#": "3083", "name": "Gateway", "city": "Cartersville", "state": "GA", "lat": 34.165230, "lon": -84.799761},
+        8: {"#": "3145", "name": "Biagi OKC", "city": "Oklahoma City", "state": "OK", "lat": 35.472989, "lon": -97.517054},
+        9: {"#": "3204", "name": "NFI Distribution", "city": "Edison", "state": "NJ", "lat": 40.518716, "lon": -74.412095},
+        10: {"#": "3187", "name": "Biagi Jax 3", "city": "Jacksonville", "state": "FL", "lat": 30.332184, "lon": -81.655651},
+        11: {"#": "3156", "name": "Updike Vacaville", "city": "Vacaville", "state": "CA", "lat": 38.356577, "lon": -121.987744},
+        12: {"#": "3177", "name": "Warehouse 3177", "city": "Unknown", "state": "XX", "lat": None, "lon": None},
+        13: {"#": "3198", "name": "Warehouse 3198", "city": "Unknown", "state": "XX", "lat": None, "lon": None},
+        14: {"#": "3125", "name": "Updike Woodland", "city": "Woodland", "state": "CA", "lat": 38.678611, "lon": -121.773329},
+        15: {"#": "3195", "name": "United Tulsa", "city": "Tulsa", "state": "OK", "lat": 36.153982, "lon": -95.992775},
+        16: {"#": "3167", "name": "Biagi Auburn", "city": "Auburn", "state": "WA", "lat": 47.307537, "lon": -122.230181},
+        17: {"#": "3041", "name": "Liberty Williamsburg", "city": "Williamsburg", "state": "VA", "lat": 37.270879, "lon": -76.707404},
+        18: {"#": "3078", "name": "Stitch-Tech 23rd Street", "city": "St. Louis", "state": "MO", "lat": 38.628028, "lon": -90.191015},
+        19: {"#": "3096", "name": "Ainsley", "city": "Baldwinsville", "state": "NY", "lat": 43.158679, "lon": -76.332710},
+        20: {"#": "3138", "name": "Quarterback Warehouse", "city": "Cambridge", "state": "ON", "lat": 43.360054, "lon": -80.312302},
+        21: {"#": "3190", "name": "STC Nashville", "city": "Nashville", "state": "IL", "lat": 38.521441, "lon": -89.380075},
+        22: {"#": "3200", "name": "NFI Columbus", "city": "Columbus", "state": "OH", "lat": 39.961176, "lon": -82.998794},
+        23: {"#": "3201", "name": "NFI Port Reading", "city": "Port Reading", "state": "NJ", "lat": 40.564270, "lon": -74.264641},
+        24: {"#": "3202", "name": "Biagi Van Nuys", "city": "Van Nuys", "state": "CA", "lat": 34.189857, "lon": -118.451357}
+    },
+    
     'customers': {
         'Orlando Bubly/Gold': 10025, 'Pepsi STL Gold': 10043, 'AB STL 6 State Lids': 10049,
         'AB LA Stella': 10056, 'FCL Sealed Lids': 10059, 'AB STL Mango Cart': 10049,
         'AB STL Stella': 10049, 'AB JKSV Stella': 10052, 'AB FCL Shocktop': 10059,
         'AB STL Mango Cart 2': 10049, 'Elysian Hazi': 32222
     },
+
     'customer_warehouse_dict': {
         10025: 3005, 10029: 3115, 10033: 3125, 10036: 3112, 10038: 3005, 10040: 3177,
         10043: 3070, 10046: 3204, 10049: 3070, 10050: 3096, 10051: 3204, 10052: 3005,
@@ -93,14 +130,14 @@ def create_progressive_total_cost_plots(data, month_order, output_dir):
             'filename': 'total_cost_current.png',
             'title': 'Current Total Cost',
             'lines': [
-                ('current_cost', 'Current Total', colors[0])
+                ('current_total_cost', 'Current Total', colors[0])
             ]
         },
         {
             'filename': 'total_cost_current_base.png',
             'title': 'Current vs Base Optimization Total Cost',
             'lines': [
-                ('current_cost', 'Current Total', colors[0]),
+                ('current_total_cost', 'Current Total', colors[0]),
                 ('base_total_cost', 'Base Optimization', colors[1])
             ]
         },
@@ -108,7 +145,7 @@ def create_progressive_total_cost_plots(data, month_order, output_dir):
             'filename': 'total_cost_all.png',
             'title': 'Total Cost Comparison',
             'lines': [
-                ('current_cost', 'Current Total', colors[0]),
+                ('current_total_cost', 'Current Total', colors[0]),
                 ('base_total_cost', 'Base Optimization', colors[1]),
                 ('base_and_rules_total_cost', 'Base + Rules Optimization', colors[2])
             ]
@@ -215,9 +252,9 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     monthly_data = monthly_data[monthly_data['month'].isin(month_order)]
 
     base_savings = monthly_data['base_total_savings']
-    base_savings_percent = (base_savings / monthly_data['current_cost']) * 100
+    base_savings_percent = (base_savings / monthly_data['current_total_cost']) * 100
     rules_savings = monthly_data['base_and_rules_total_savings']
-    rules_savings_percent = (rules_savings / monthly_data['current_cost']) * 100
+    rules_savings_percent = (rules_savings / monthly_data['current_total_cost']) * 100
 
     x = np.arange(len(month_order))
     width = 0.5
@@ -346,11 +383,11 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     # Create separate plots for Production and Shipping costs
     cost_types = {
         'Production': {
-            'columns': ['current_production', 'base_production_cost', 'base_and_rules_production_cost'],
+            'columns': ['current_production_cost', 'base_production_cost', 'base_and_rules_production_cost'],
             'labels': ['Current Production', 'Base Optimization', 'Base + Rules Optimization']
         },
         'Shipping': {
-            'columns': ['current_shipping', 'base_shipping_cost', 'base_and_rules_shipping_cost'],
+            'columns': ['current_shipping_cost', 'base_shipping_cost', 'base_and_rules_shipping_cost'],
             'labels': ['Current Shipping', 'Base Optimization', 'Base + Rules Optimization']
         }
     }
@@ -431,13 +468,13 @@ def create_pattern_visualizations(df: pd.DataFrame, mappings: dict) -> None:
     # Create production pattern
     prod_pattern = pd.DataFrame('□', 
                             index=[mappings['products'][int(i)] for i in sorted(df['i'].unique())],
-                            columns=[mappings['plants'][int(j)] for j in sorted(df['j'].unique())],
+                            columns=[mappings['plants'][int(j)]['code'] for j in sorted(df['j'].unique())],
                             dtype=str)
 
     for _, row in df.iterrows():
         if row['C_{ij}'] > 0:
             prod_pattern.loc[mappings['products'][int(row['i'])], 
-                           mappings['plants'][int(row['j'])]] = '■'
+                           mappings['plants'][int(row['j'])]['code']] = '■'
 
     st.write("Production Capability Map (■ = can produce, □ = cannot produce)")
     st.dataframe(prod_pattern)
@@ -445,13 +482,12 @@ def create_pattern_visualizations(df: pd.DataFrame, mappings: dict) -> None:
     # Create shipping pattern  
     ship_pattern = pd.DataFrame('□',
                             index=[mappings['products'][int(i)] for i in sorted(df['i'].unique())],
-                            columns=[str(mappings['warehouses'][int(k)]) for k in sorted(df['k'].unique())],
+                            columns=[mappings['warehouses'][int(k)]['#'] for k in sorted(df['k'].unique())],
                             dtype=str)
 
     for _, row in df.iterrows():
         if row['D_{ik}'] > 0:
-            ship_pattern.loc[mappings['products'][int(row['i'])],
-                           str(mappings['warehouses'][int(row['k'])])] = '■'
+            ship_pattern.loc[mappings['products'][int(row['i'])], mappings['warehouses'][int(row['k'])]['#']] = '■'
 
     st.write("Shipping Demand Map (■ = has demand, □ = no demand)") 
     st.dataframe(ship_pattern)
@@ -670,8 +706,8 @@ def optimize_all_months(uploaded_file, mappings):
             
             # Add plant_code, warehouse_id, and customer_id columns
             df['product_name'] = df['i'].map(mappings['products'])
-            df['plant_code'] = df['j'].map(mappings['plants'])
-            df['warehouse_id'] = df['k'].map(mappings['warehouses'])
+            df['plant_code'] = df['j'].map(lambda j: mappings['plants'][j]['code'])
+            df['warehouse_id'] = df['k'].map(lambda k: mappings['warehouses'][k]['#'])
 
             # Run optimization for the current month
             df = optimize_month(df, sheet_name)
@@ -680,15 +716,15 @@ def optimize_all_months(uploaded_file, mappings):
             df['product_name'] = df['i'].map(mappings['products'])
             
             # Current costs
-            df['current_cost'] = (df['c^p_{ij}'] + df['c^l_{ijk}']) * df['x_{ijk}']
-            df['current_production'] = df['c^p_{ij}'] * df['x_{ijk}']
-            df['current_shipping'] = df['c^l_{ijk}'] * df['x_{ijk}']
+            df['current_total_cost'] = (df['c^p_{ij}'] + df['c^l_{ijk}']) * df['x_{ijk}']
+            df['current_production_cost'] = df['c^p_{ij}'] * df['x_{ijk}']
+            df['current_shipping_cost'] = df['c^l_{ijk}'] * df['x_{ijk}']
             
             # Store monthly data
             monthly_data.append({'month': month, 'data': df})
             
             # Create product summary
-            cols_to_sum = ['current_cost', 'current_production', 'current_shipping',
+            cols_to_sum = ['current_total_cost', 'current_production_cost', 'current_shipping_cost',
                           'base_total_cost', 'base_production_cost', 'base_shipping_cost',
                           'base_and_rules_total_cost', 'base_and_rules_production_cost', 'base_and_rules_shipping_cost']
             prod_sum = df.groupby('product_name')[cols_to_sum].sum().reset_index()
@@ -716,9 +752,9 @@ def optimize_all_months(uploaded_file, mappings):
             total = pd.DataFrame([{
                 'product_name': 'Total',
                 'month': month,
-                'current_cost': total_current['total'],
-                'current_production': total_current['production'],
-                'current_shipping': total_current['shipping'],
+                'current_total_cost': total_current['total'],
+                'current_production_cost': total_current['production'],
+                'current_shipping_cost': total_current['shipping'],
                 'base_total_cost': total_base['total'],
                 'base_production_cost': total_base['production'],
                 'base_shipping_cost': total_base['shipping'],
@@ -730,16 +766,16 @@ def optimize_all_months(uploaded_file, mappings):
             # Calculate savings
             for df_temp in [prod_sum, total]:
                 # Total cost savings
-                df_temp['base_total_savings'] = df_temp['current_cost'] - df_temp['base_total_cost']
-                df_temp['base_and_rules_total_savings'] = df_temp['current_cost'] - df_temp['base_and_rules_total_cost']
+                df_temp['base_total_savings'] = df_temp['current_total_cost'] - df_temp['base_total_cost']
+                df_temp['base_and_rules_total_savings'] = df_temp['current_total_cost'] - df_temp['base_and_rules_total_cost']
                 
                 # Production cost savings
-                df_temp['base_production_savings'] = df_temp['current_production'] - df_temp['base_production_cost']
-                df_temp['base_and_rules_production_savings'] = df_temp['current_production'] - df_temp['base_and_rules_production_cost']
+                df_temp['base_production_savings'] = df_temp['current_production_cost'] - df_temp['base_production_cost']
+                df_temp['base_and_rules_production_savings'] = df_temp['current_production_cost'] - df_temp['base_and_rules_production_cost']
                 
                 # Shipping cost savings
-                df_temp['base_shipping_savings'] = df_temp['current_shipping'] - df_temp['base_shipping_cost']
-                df_temp['base_and_rules_shipping_savings'] = df_temp['current_shipping'] - df_temp['base_and_rules_shipping_cost']
+                df_temp['base_shipping_savings'] = df_temp['current_shipping_cost'] - df_temp['base_shipping_cost']
+                df_temp['base_and_rules_shipping_savings'] = df_temp['current_shipping_cost'] - df_temp['base_and_rules_shipping_cost']
             
             summaries.append({
                 'summary': pd.concat([prod_sum, total])
@@ -781,7 +817,7 @@ def optimize_all_months(uploaded_file, mappings):
         
         for col, name in percentage_cols.items():
             percentage_summary[f'{name} %'] = (
-                percentage_summary[col] / percentage_summary['current_cost'] * 100
+                percentage_summary[col] / percentage_summary['current_total_cost'] * 100
             )
         
         status_text.text("Processing complete!")
@@ -939,9 +975,9 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     df_product = month_data[month_data['i'] == product_id].copy()
     
     # Get costs directly from df_product
-    current_ship_cost = df_product['current_shipping'].sum()
-    current_prod_cost = df_product['current_production'].sum()
-    current_total = df_product['current_cost'].sum()
+    current_ship_cost = df_product['current_shipping_cost'].sum()
+    current_prod_cost = df_product['current_production_cost'].sum()
+    current_total = df_product['current_total_cost'].sum()
     
     if base_only:
         opt_ship_cost = df_product['base_shipping_cost'].sum()
@@ -1073,45 +1109,8 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     
     return m, routes_df
 
-def get_supply_chain_locations():
+def get_supply_chain_locations(mappings):
     """Retrieves and returns supply chain location data with coordinates"""
-    
-    # Data setup
-    plants = pd.DataFrame([
-        ['5101', 'JAX', 'Jacksonville', 'FL', 'Can'],
-        ['5103', 'ARN', 'Arnold', 'MO', 'Can'],
-        ['5107', 'WIN', 'Windsor', 'CO', 'Can'],
-        ['5109', 'NBG', 'Newburgh', 'NY', 'Can'],
-        ['5112', 'MIR', 'Mira Loma', 'CA', 'Can'],
-        ['5205', 'OKC', 'Oklahoma City', 'OK', 'Lid'],
-        ['5208', 'RIV', 'Riverside', 'CA', 'Lid']
-    ], columns=['Plant #', 'Code', 'City', 'State', 'Type'])
-
-    warehouses = pd.DataFrame([
-        ['3005', 'Biagi Jax 2', 'Jacksonville', 'FL'],
-        ['3041', 'Liberty Williamsburg', 'Williamsburg', 'VA'],
-        ['3070', 'Stitch-Tec 1st Street', 'St. Louis', 'MO'],
-        ['3078', 'Stitch-Tech 23rd Street', 'St. Louis', 'MO'],
-        ['3083', 'Gateway', 'Cartersville', 'GA'],
-        ['3095', 'Buske Houston', 'Houston', 'TX'],
-        ['3096', 'Ainsley', 'Baldwinsville', 'NY'],
-        ['3112', 'Biagi Ontario', 'Ontario', 'CA'],
-        ['3115', 'NFI Newburgh', 'Newburgh', 'NY'],
-        ['3125', 'Updike Woodland', 'Woodland', 'CA'],
-        ['3138', 'Quarterback Warehouse', 'Cambridge', 'ON'],
-        ['3139', 'TMSI-Windsor', 'Windsor', 'CO'],
-        ['3145', 'Biagi OKC', 'Oklahoma City', 'OK'],
-        ['3156', 'Updike Vacaville', 'Vacaville', 'CA'],
-        ['3167', 'Biagi Auburn', 'Auburn', 'WA'],
-        ['3187', 'Biagi Jax 3', 'Jacksonville', 'FL'],
-        ['3190', 'STC Nashville', 'Nashville', 'IL'],
-        ['3195', 'United Tulsa', 'Tulsa', 'OK'],
-        ['3200', 'NFI Columbus', 'Columbus', 'OH'],
-        ['3201', 'NFI Port Reading', 'Port Reading', 'NJ'],
-        ['3202', 'Biagi Van Nuys', 'Van Nuys', 'CA'],
-        ['3204', 'NFI Distribution', 'Edison', 'NJ']
-    ], columns=['ID', 'Name', 'City', 'State'])
-
     def get_coords(city, state):
         try:
             loc = Nominatim(user_agent="supply_chain").geocode(f"{city}, {state}, {'Canada' if state=='ON' else 'USA'}")
@@ -1119,15 +1118,24 @@ def get_supply_chain_locations():
         except GeocoderTimedOut: return None, None
 
     # Get coordinates
-    plants[['lat','lon']] = plants.apply(lambda x: pd.Series(get_coords(x['City'], x['State'])), axis=1)
-    warehouses[['lat','lon']] = warehouses.apply(lambda x: pd.Series(get_coords(x['City'], x['State'])), axis=1)
+    plants = pd.DataFrame([
+        {'Plant #': v['#'], 'Code': v['code'], 'City': v['city'], 'State': v['state'], 'Type': v['type']}
+        for v in mappings['plants'].values()
+    ])
     
-    print(f"Plants mapped: {len(plants[plants.lat.notna()])} of {len(plants)}")
-    print(f"Warehouses mapped: {len(warehouses[warehouses.lat.notna()])} of {len(warehouses)}")
+    warehouses = pd.DataFrame([
+        {'ID': k, 'Name': v['name'], 'City': v['city'], 'State': v['state']}
+        for k,v in mappings['warehouses'].items()
+    ])
+    
+    # Get coordinates for each location
+    for df in [plants, warehouses]:
+        df[['lat','lon']] = df.apply(lambda x: pd.Series(get_coords(x['City'], x['State'])), axis=1)
+        print(f"{df.columns[0].split()[0]} mapped: {len(df[df.lat.notna()])} of {len(df)}")
     
     return plants, warehouses
 
-# df_plants, df_warehouses = get_supply_chain_locations()
+# df_plants, df_warehouses = get_supply_chain_locations(mappings)
 
 # Pre-defined plants data with coordinates
 df_plants = pd.DataFrame([
@@ -1271,6 +1279,7 @@ with tab1:
                             st.error("Optimization failed. Please check your input data.")
                     except Exception as e:
                         st.error(f"An error occurred during optimization: {str(e)}")
+                        st.code(traceback.format_exc())
     
     # Show download button if optimization results exist
     if st.session_state['optimization_results'] is not None:
@@ -1325,9 +1334,9 @@ with tab2:
             annual_summary = st.session_state['results']['annual_summary']
             
             # Extract costs and savings
-            current_cost = annual_summary['current_cost'].iloc[0]
-            current_production_cost = annual_summary['current_production'].iloc[0]
-            current_shipping_cost = annual_summary['current_shipping'].iloc[0]
+            current_cost = annual_summary['current_total_cost'].iloc[0]
+            current_production_cost = annual_summary['current_production_cost'].iloc[0]
+            current_shipping_cost = annual_summary['current_shipping_cost'].iloc[0]
             
             base_total_cost = annual_summary['base_total_cost'].iloc[0]
             base_production_cost = annual_summary['base_production_cost'].iloc[0]
@@ -1389,6 +1398,7 @@ with tab2:
             st.dataframe(savings_summary_df, use_container_width=True)
         except Exception as e:
             st.error(f"Error generating visualization: {str(e)}")
+            st.code(traceback.format_exc())
 
 with tab3:
     st.header("Visualize Suggested Shipping Routes")
@@ -1457,10 +1467,19 @@ with tab3:
 
                             st.header("Suggested Shipping Routes Details")
                             diff_col = 'diff_base' if base_only else 'diff_base_and_rules'
-                            display_cols = ['plant_code', 'warehouse_id', 'warehouse_name', 'associated_customers', diff_col]
+                            production_cost_col = 'base_production_cost' if base_only else 'base_and_rules_production_cost'
+                            shipping_cost_col = 'base_shipping_cost' if base_only else 'base_and_rules_shipping_cost'
+                            total_cost_col = 'base_total_cost' if base_only else 'base_and_rules_total_cost'
+
+                            display_cols = ['plant_code', 'warehouse_id', 'warehouse_name', diff_col, \
+                                            'current_production_cost', production_cost_col, 'current_shipping_cost', shipping_cost_col, 'current_total_cost', total_cost_col, 'associated_customers']
                             routes_display = routes_df[display_cols].copy()
-                            routes_display[diff_col] = routes_display[diff_col].apply(lambda x: f"+{float(x):.3f}" if float(x) > 0 else f"{float(x):.3f}")
-                            routes_display.columns = ['Plant Code', 'Warehouse #', 'Warehouse Name', 'Warehouse Customers', 'Shipment Adjustment (Million Units)'] # rename columns
+                            routes_display[diff_col] = routes_display[diff_col].apply(lambda x: f"+{float(x):.3f}" if float(x) > 0 else f"{float(x):.3f}")        
+                            routes_display.columns = ['Plant Code', 'Warehouse #', 'Warehouse Name', 'Shipment Adjustment\n(Million Units)', \
+                                                      'Current Production Cost', 'Optimized Production Cost', 'Current Shipping Cost', 'Optimized Shipping Cost', 'Current Total Cost', 'Optimized Total Cost', 'Warehouse Customers']
+                                                      
+                            for col in ['Current Production Cost', 'Optimized Production Cost', 'Current Shipping Cost', 'Optimized Shipping Cost', 'Current Total Cost', 'Optimized Total Cost']:
+                                routes_display[col] = routes_display[col].apply(lambda x: f"${int(round(x)):,}")
                             
                             # Create a styled dataframe
                             def style_diff(val):
@@ -1469,7 +1488,7 @@ with tab3:
                                 color = 'red' if float(val) < 0 else 'green'
                                 return f'color: {color}'
                             
-                            styled_df = routes_display.reset_index(drop=True).style.map(style_diff, subset=['Shipment Adjustment (Million Units)'])
+                            styled_df = routes_display.reset_index(drop=True).style.map(style_diff, subset=['Shipment Adjustment\n(Million Units)'])
                             st.dataframe(styled_df, use_container_width=True)
                         else:
                             st.info("No route changes found for the selected criteria.")
@@ -1477,7 +1496,6 @@ with tab3:
                 except Exception as e:
                     st.error(f"Error generating shipping routes visualization: {str(e)}")
                     st.write("Error details:", str(e))
-                    import traceback
                     st.code(traceback.format_exc())
 
         except Exception as e:
