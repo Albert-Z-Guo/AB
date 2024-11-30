@@ -199,7 +199,7 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     product_rules = product_data.groupby('product_name')['base_and_rules_total_savings'].sum().fillna(0)
     
     # Filter out products with zero savings
-    nonzero_mask = (product_base.round() > 0) | (product_rules.round() > 0)
+    nonzero_mask = (abs(product_base.round()) > 0) | (abs(product_rules.round()) > 0)
     product_base = product_base[nonzero_mask]
     product_rules = product_rules[nonzero_mask]
     products = product_base.index
@@ -824,7 +824,7 @@ def optimize_all_months(uploaded_file, mappings):
         return {
             'monthly_data': monthly_data,
             'results_df': results_df,
-            'percentage_summary': percentage_summary,
+            'percentage_summary': percentage_summary[['month'] + [f'{name} %' for name in percentage_cols.values()]],
             'annual_summary': annual_sum
         }
     
@@ -1258,7 +1258,7 @@ with tab1:
                                 # Save monthly data sheets
                                 for monthly_data in results['monthly_data']:
                                     monthly_data['data'].to_excel(writer, 
-                                        sheet_name=f"Data-{monthly_data['month']}", 
+                                        sheet_name=f"{monthly_data['month']}", 
                                         index=False)
                                 
                                 # Save summary sheets
