@@ -5,6 +5,7 @@ from typing import Tuple
 
 import cvxpy as cp
 import folium
+from folium.plugins import AntPath
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 import matplotlib.pyplot as plt
@@ -1054,7 +1055,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
             wh_loc = warehouse_coords[warehouse_id]
             
             # Add AntPath for animation
-            folium.plugins.AntPath(
+            AntPath(
                 locations=[plant_loc, wh_loc],
                 color='green' if value > 0 else 'red',  # Blue for increase, red for decrease
                 weight=2 + abs(value) / 20,  # Scale weight by magnitude
