@@ -1405,17 +1405,17 @@ with tab2:
             # Create a DataFrame for cost metrics
             cost_comparison_df = pd.DataFrame({
                 "Cost Type": ["Total Cost", "Production Cost", "Shipping Cost"],
-                "Current": [
+                "Annual Current": [
                     format_number(current_cost),
                     format_number(current_production_cost),
                     format_number(current_shipping_cost)
                 ],
-                "Base Optimization": [
+                "Annual Base Optimization": [
                     format_number(base_total_cost),
                     format_number(base_production_cost),
                     format_number(base_shipping_cost)
                 ],
-                "Base + Rules Optimization": [
+                "Annual Base + Rules Optimization": [
                     format_number(rules_total_cost),
                     format_number(rules_production_cost),
                     format_number(rules_shipping_cost)
