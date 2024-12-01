@@ -14,18 +14,18 @@ import pandas as pd
 import streamlit as st
 
 
-# Define mappings
+# variables mapping
 mappings = {
     'products': {1: "12 oz", 2: "12 oz Sleek", 3: "16 oz", 4: "Lids", 5: "25 oz", 6: "16 BT"},
     
     'plants': {
-        1: {"#": "5112", "code": "MIR", "city": "Mira Loma", "state": "CA", "type": "Can"},
-        2: {"#": "5101", "code": "JAX", "city": "Jacksonville", "state": "FL", "type": "Can"},
-        3: {"#": "5208", "code": "RIV", "city": "Riverside", "state": "CA", "type": "Lid"},
-        4: {"#": "5103", "code": "ARN", "city": "Arnold", "state": "MO", "type": "Can"},
-        5: {"#": "5205", "code": "OKC", "city": "Oklahoma City", "state": "OK", "type": "Lid"},
-        6: {"#": "5109", "code": "NBG", "city": "Newburgh", "state": "NY", "type": "Can"},
-        7: {"#": "5107", "code": "WIN", "city": "Windsor", "state": "CO", "type": "Can"}
+        1: {'#': '5112', 'code': 'MIR', 'city': 'Mira Loma', 'state': 'CA', 'type': 'Can', 'lat': 33.986391, 'lon': -117.522733},
+        2: {'#': '5101', 'code': 'JAX', 'city': 'Jacksonville', 'state': 'FL', 'type': 'Can', 'lat': 30.332184, 'lon': -81.655651},
+        3: {'#': '5208', 'code': 'RIV', 'city': 'Riverside', 'state': 'CA', 'type': 'Lid', 'lat': 33.982495, 'lon': -117.374238},
+        4: {'#': '5103', 'code': 'ARN', 'city': 'Arnold', 'state': 'MO', 'type': 'Can', 'lat': 38.422671, 'lon': -90.375829},
+        5: {'#': '5205', 'code': 'OKC', 'city': 'Oklahoma City', 'state': 'OK', 'type': 'Lid', 'lat': 35.472989, 'lon': -97.517054},
+        6: {'#': '5109', 'code': 'NBG', 'city': 'Newburgh', 'state': 'NY', 'type': 'Can', 'lat': 41.503427, 'lon': -74.010418},
+        7: {'#': '5107', 'code': 'WIN', 'city': 'Windsor', 'state': 'CO', 'type': 'Can', 'lat': 40.477482, 'lon': -104.901361}
     },
     
     'warehouses': {
@@ -399,6 +399,43 @@ def create_optimization_plots(df: pd.DataFrame, output_dir: str = './'):
     # Create progressive total cost comparison plots
     create_progressive_total_cost_plots(total_data, month_order, output_dir)
 
+def validate_uploaded_file(uploaded_file):
+    """
+    Validate the uploaded Excel file for:
+    1. Existence of required sheets for all months.
+    2. Presence of required columns in each sheet.
+    
+    Args:
+        uploaded_file: The uploaded Excel file.
+        
+    Returns:
+        bool: True if the file is valid, False otherwise.
+        str: Error message if invalid, empty string otherwise.
+    """
+    required_columns = ['c^p_{ij}', 'c^l_{ijk}', 'D_{ik}', 'C_{ij}']
+    required_sheets = [f'Solver-{month}' for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']]
+    
+    try:
+        # Load the Excel file
+        excel_data = pd.ExcelFile(uploaded_file)
+        missing_sheets = [sheet for sheet in required_sheets if sheet not in excel_data.sheet_names]
+        
+        if missing_sheets:
+            return False, f"Missing required sheets: {', '.join(missing_sheets)}"
+        
+        # Check for required columns in each sheet
+        for sheet in required_sheets:
+            sheet_data = pd.read_excel(excel_data, sheet_name=sheet)
+            missing_columns = [col for col in required_columns if col not in sheet_data.columns]
+            
+            if missing_columns:
+                return False, f"Missing required columns in sheet '{sheet}': {', '.join(missing_columns)}!"
+        
+        return True, ""  # File is valid
+    except Exception as e:
+        return False, f"Error reading the file: {str(e)}"
+    
 def load_and_clean_data(file_path: str, sheet_name: str) -> pd.DataFrame:
     """
     Load and clean optimization data from Excel file.
@@ -831,8 +868,65 @@ def optimize_all_months(uploaded_file, mappings):
     
     return None
 
-def create_supply_chain_map(plants, warehouses):
-    """Creates and displays an interactive supply chain network map in Jupyter"""
+def get_supply_chain_locations(mappings):
+    """Retrieves and returns supply chain location data with coordinates"""
+    def get_coords(city, state):
+        try:
+            loc = Nominatim(user_agent="supply_chain").geocode(f"{city}, {state}, {'Canada' if state=='ON' else 'USA'}")
+            return (loc.latitude, loc.longitude) if loc else (None, None)
+        except GeocoderTimedOut: return None, None
+
+    # Check if lat and lon are already in mappings
+    if all('lat' in v and 'lon' in v for v in mappings['plants'].values()) and \
+       all('lat' in v and 'lon' in v for v in mappings['warehouses'].values()):
+        df_plants = pd.DataFrame([
+            {
+                'Plant #': v['#'],
+                'Code': v['code'],
+                'City': v['city'], 
+                'State': v['state'],
+                'Type': v['type'],
+                'lat': v['lat'],
+                'lon': v['lon'],
+            }
+            for v in mappings['plants'].values()
+        ])
+
+        df_warehouses = pd.DataFrame([
+            {
+                'Warehouse #': v['#'],
+                'Name': v['name'],
+                'City': v['city'],
+                'State': v['state'],
+                'lat': v['lat'],
+                'lon': v['lon']
+            }
+            for v in mappings['warehouses'].values()
+            if v['lat'] is not None and v['lon'] is not None  # Filter out entries with no coordinates
+        ])
+        return df_plants, df_warehouses
+
+    # Get coordinates
+    df_plants = pd.DataFrame([
+        {'Plant #': v['#'], 'Code': v['code'], 'City': v['city'], 'State': v['state'], 'Type': v['type']}
+        for v in mappings['plants'].values()
+    ])
+    
+    df_warehouses = pd.DataFrame([
+        {'Warehouse #': k, 'Name': v['name'], 'City': v['city'], 'State': v['state']}
+        for k,v in mappings['warehouses'].items()
+    ])
+    
+    for df in [df_plants, df_warehouses]:
+        df[['lat','lon']] = df.apply(lambda x: pd.Series(get_coords(x['City'], x['State'])), axis=1)
+        print(f"Warehouse # mapped: {len(df[df.lat.notna()])} of {len(df)}")
+
+    return df_plants, df_warehouses
+
+def create_supply_chain_map(mappings):
+    """Create and display a supply chain map using Folium"""
+    df_plants, df_warehouses = get_supply_chain_locations(mappings)
+
     # Create map and add style
     m = folium.Map(location=[39.8, -91], zoom_start=4)
     
@@ -859,7 +953,7 @@ def create_supply_chain_map(plants, warehouses):
     m.get_root().header.add_child(folium.Element(popup_style))
 
     # Add plant markers with 'industry' icon
-    for _, p in plants.iterrows():
+    for _, p in df_plants.iterrows():
         if pd.notna(p['lat']):
             popup_html = f"""<b>Plant: {p['Plant #']}</b><br>
                 Code: {p['Code']}, {p['City']}, {p['State']}<br>
@@ -874,9 +968,9 @@ def create_supply_chain_map(plants, warehouses):
             ).add_to(m)
 
     # Add warehouse markers with 'warehouse' icon
-    for _, w in warehouses.iterrows():
+    for _, w in df_warehouses.iterrows():
         if pd.notna(w['lat']):
-            popup_html = f"""<b>Warehouse: {w['ID']}</b><br>
+            popup_html = f"""<b>Warehouse: {w['Warehouse #']}</b><br>
                 Name: {w['Name']}, {w['City']}, {w['State']}"""
             folium.Marker(
                 location=[w['lat'] + np.random.uniform(-0.005, 0.005), 
@@ -939,7 +1033,7 @@ def create_supply_chain_map(plants, warehouses):
                         f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Code']}</td>"
                         f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td>"
                         f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Type']}</td></tr>" 
-                        for _, row in plants.iterrows())}
+                        for _, row in df_plants.iterrows())}
             </table>
             <div style="margin-bottom: 3px"><strong>Warehouses</strong></div>
             <table style="width: 100%; border-collapse: collapse">
@@ -948,25 +1042,27 @@ def create_supply_chain_map(plants, warehouses):
                     <th style="border: 1px solid #ddd; padding: 2px">Name</th>
                     <th style="border: 1px solid #ddd; padding: 2px">Location</th>
                 </tr>
-                {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['ID']}</td>"
+                {''.join(f"<tr><td style='border: 1px solid #ddd; padding: 2px'>{row['Warehouse #']}</td>"
                         f"<td style='border: 1px solid #ddd; padding: 2px'>{row['Name']}</td>"
                         f"<td style='border: 1px solid #ddd; padding: 2px'>{row['City']}, {row['State']}</td></tr>" 
-                        for _, row in warehouses.iterrows())}
+                        for _, row in df_warehouses.iterrows())}
             </table>
         </div>
     """
 
-    # Add legend, table, and resize script to the map
+    # Add legend and tables to map
     m.get_root().html.add_child(folium.Element(legend_html))
     m.get_root().html.add_child(folium.Element(tables_html))
     return m
 
-def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_id=4, base_only=True, month='Jan', mappings=mappings):
+def create_shipping_routes_map(monthly_data, product_id=4, base_only=True, month='Jan', mappings=mappings):
     """
     Create an interactive map showing shipping route changes with animated paths using AntPath.
     Markers for plants and warehouses are displayed only if they are involved in the routes.
     Adds numeric labels above the middle of each arrow.
     """
+    df_plants, df_warehouses = get_supply_chain_locations(mappings)
+
     # Get data for the specified month
     month_data = next((data['data'] for data in monthly_data if data['month'] == month), None)
     if month_data is None:
@@ -998,7 +1094,7 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
     routes_df['plant_code'] = routes_df['plant_code'].astype(str)
     routes_df['warehouse_id'] = routes_df['warehouse_id'].astype(str)
     df_plants['Code'] = df_plants['Code'].astype(str)
-    df_warehouses['ID'] = df_warehouses['ID'].astype(str)
+    df_warehouses['Warehouse #'] = df_warehouses['Warehouse #'].astype(str)
 
     # Add random noise to coordinates to avoid overlap cases
     df_plants['lat'] += np.random.uniform(-0.005, 0.005, size=len(df_plants))
@@ -1012,13 +1108,13 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
         warehouse_customers_dict[str(warehouse)].append(customer)
     
     # Add warehouse names and associated customers to routes_df
-    routes_df['warehouse_name'] = routes_df['warehouse_id'].map(df_warehouses.set_index('ID')['Name'].get)
+    routes_df['warehouse_name'] = routes_df['warehouse_id'].map(df_warehouses.set_index('Warehouse #')['Name'].get)
     routes_df['associated_customers'] = routes_df['warehouse_id'].map(lambda x: ', '.join(map(str, warehouse_customers_dict[x])))
-    
+
     # Prepare mappings for coordinates
     plant_coords = dict(zip(df_plants['Code'], zip(df_plants['lat'], df_plants['lon'])))
-    warehouse_coords = dict(zip(df_warehouses['ID'], zip(df_warehouses['lat'], df_warehouses['lon'])))
-    
+    warehouse_coords = dict(zip(df_warehouses['Warehouse #'], zip(df_warehouses['lat'], df_warehouses['lon'])))
+
     # Create the map centered on the US
     m = folium.Map(location=[30, -98.5795], zoom_start=5)
     
@@ -1035,10 +1131,10 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
         ).add_to(m)
     
     # Add markers only for relevant warehouses
-    for _, row in df_warehouses[df_warehouses['ID'].isin(routes_df['warehouse_id'].unique())].iterrows():
-        popup_html = f"""<b>Warehouse: {row['ID']}</b><br>
+    for _, row in df_warehouses[df_warehouses['Warehouse #'].isin(routes_df['warehouse_id'].unique())].iterrows():
+        popup_html = f"""<b>Warehouse: {row['Warehouse #']}</b><br>
                     Name: {row['Name']}, {row['City']}, {row['State']}<br>
-                    Customers: {routes_df[routes_df['warehouse_id'] == row['ID']]['associated_customers'].values[0]}"""
+                    Customers: {routes_df[routes_df['warehouse_id'] == row['Warehouse #']]['associated_customers'].values[0]}"""
         folium.Marker(
             location=[row['lat'], row['lon']],
             icon=folium.Icon(color='green', icon='warehouse', prefix='fa'),
@@ -1095,122 +1191,20 @@ def create_shipping_routes_map(df_plants, df_warehouses, monthly_data, product_i
         <p style="margin: 0; color: red;">Red: Decreased Volume →</p>
         <p style="margin: 0;">Line thickness indicates magnitude</p>
         <hr style="margin: 5px 0;">
-        <p style="margin: 0; font-weight: bold;">Current Total Cost: ${current_total:,.2f}</p>
-        <p style="margin: 0;">Shipping: ${current_ship_cost:,.2f}</p>
-        <p style="margin: 0;">Production: ${current_prod_cost:,.2f}</p>
+        <p style="margin: 0; font-weight: bold;">Current Total Cost: ${current_total:,.0f}</p>
+        <p style="margin: 0;">Shipping: ${current_ship_cost:,.0f}</p>
+        <p style="margin: 0;">Production: ${current_prod_cost:,.0f}</p>
         <hr style="margin: 5px 0;">
-        <p style="margin: 0; font-weight: bold;">Optimized Total Cost: ${opt_total:,.2f}</p>
-        <p style="margin: 0;">Shipping: ${opt_ship_cost:,.2f}</p>
-        <p style="margin: 0;">Production: ${opt_prod_cost:,.2f}</p>
+        <p style="margin: 0; font-weight: bold;">Optimized Total Cost: ${opt_total:,.0f}</p>
+        <p style="margin: 0;">Shipping: ${opt_ship_cost:,.0f}</p>
+        <p style="margin: 0;">Production: ${opt_prod_cost:,.0f}</p>
         <hr style="margin: 5px 0;">
-        <p style="margin: 0; font-weight: bold;">Total Savings: ${current_total - opt_total:,.2f}</p>
+        <p style="margin: 0; font-weight: bold;">Total Savings: ${current_total - opt_total:,.0f}</p>
         </div>
     """
     m.get_root().html.add_child(folium.Element(legend_html))
     
     return m, routes_df
-
-def get_supply_chain_locations(mappings):
-    """Retrieves and returns supply chain location data with coordinates"""
-    def get_coords(city, state):
-        try:
-            loc = Nominatim(user_agent="supply_chain").geocode(f"{city}, {state}, {'Canada' if state=='ON' else 'USA'}")
-            return (loc.latitude, loc.longitude) if loc else (None, None)
-        except GeocoderTimedOut: return None, None
-
-    # Get coordinates
-    plants = pd.DataFrame([
-        {'Plant #': v['#'], 'Code': v['code'], 'City': v['city'], 'State': v['state'], 'Type': v['type']}
-        for v in mappings['plants'].values()
-    ])
-    
-    warehouses = pd.DataFrame([
-        {'ID': k, 'Name': v['name'], 'City': v['city'], 'State': v['state']}
-        for k,v in mappings['warehouses'].items()
-    ])
-    
-    # Get coordinates for each location
-    for df in [plants, warehouses]:
-        df[['lat','lon']] = df.apply(lambda x: pd.Series(get_coords(x['City'], x['State'])), axis=1)
-        print(f"{df.columns[0].split()[0]} mapped: {len(df[df.lat.notna()])} of {len(df)}")
-    
-    return plants, warehouses
-
-# df_plants, df_warehouses = get_supply_chain_locations(mappings)
-
-# Pre-defined plants data with coordinates
-df_plants = pd.DataFrame([
-    ['5101', 'JAX', 'Jacksonville', 'FL', 'Can', 30.332184, -81.655651],
-    ['5103', 'ARN', 'Arnold', 'MO', 'Can', 38.422671, -90.375829],
-    ['5107', 'WIN', 'Windsor', 'CO', 'Can', 40.477482, -104.901361],
-    ['5109', 'NBG', 'Newburgh', 'NY', 'Can', 41.503427, -74.010418],
-    ['5112', 'MIR', 'Mira Loma', 'CA', 'Can', 33.986391, -117.522733],
-    ['5205', 'OKC', 'Oklahoma City', 'OK', 'Lid', 35.472989, -97.517054],
-    ['5208', 'RIV', 'Riverside', 'CA', 'Lid', 33.982495, -117.374238]
-], columns=['Plant #', 'Code', 'City', 'State', 'Type', 'lat', 'lon'])
-
-# Pre-defined warehouses data with coordinates
-df_warehouses = pd.DataFrame([
-    ['3005', 'Biagi Jax 2', 'Jacksonville', 'FL', 30.332184, -81.655651],
-    ['3041', 'Liberty Williamsburg', 'Williamsburg', 'VA', 37.270879, -76.707404],
-    ['3070', 'Stitch-Tec 1st Street', 'St. Louis', 'MO', 38.628028, -90.191015],
-    ['3078', 'Stitch-Tech 23rd Street', 'St. Louis', 'MO', 38.628028, -90.191015],
-    ['3083', 'Gateway', 'Cartersville', 'GA', 34.165230, -84.799761],
-    ['3095', 'Buske Houston', 'Houston', 'TX', 29.758938, -95.367697],
-    ['3096', 'Ainsley', 'Baldwinsville', 'NY', 43.158679, -76.332710],
-    ['3112', 'Biagi Ontario', 'Ontario', 'CA', 34.065846, -117.648430],
-    ['3115', 'NFI Newburgh', 'Newburgh', 'NY', 41.503427, -74.010418],
-    ['3125', 'Updike Woodland', 'Woodland', 'CA', 38.678611, -121.773329],
-    ['3138', 'Quarterback Warehouse', 'Cambridge', 'ON', 43.360054, -80.312302],
-    ['3139', 'TMSI-Windsor', 'Windsor', 'CO', 40.477482, -104.901361],
-    ['3145', 'Biagi OKC', 'Oklahoma City', 'OK', 35.472989, -97.517054],
-    ['3156', 'Updike Vacaville', 'Vacaville', 'CA', 38.356577, -121.987744],
-    ['3167', 'Biagi Auburn', 'Auburn', 'WA', 47.307537, -122.230181],
-    ['3187', 'Biagi Jax 3', 'Jacksonville', 'FL', 30.332184, -81.655651],
-    ['3190', 'STC Nashville', 'Nashville', 'IL', 38.521441, -89.380075],
-    ['3195', 'United Tulsa', 'Tulsa', 'OK', 36.153982, -95.992775],
-    ['3200', 'NFI Columbus', 'Columbus', 'OH', 39.961176, -82.998794],
-    ['3201', 'NFI Port Reading', 'Port Reading', 'NJ', 40.564270, -74.264641],
-    ['3202', 'Biagi Van Nuys', 'Van Nuys', 'CA', 34.189857, -118.451357],
-    ['3204', 'NFI Distribution', 'Edison', 'NJ', 40.518716, -74.412095]
-], columns=['ID', 'Name', 'City', 'State', 'lat', 'lon'])
-
-def validate_uploaded_file(uploaded_file):
-    """
-    Validate the uploaded Excel file for:
-    1. Existence of required sheets for all months.
-    2. Presence of required columns in each sheet.
-    
-    Args:
-        uploaded_file: The uploaded Excel file.
-        
-    Returns:
-        bool: True if the file is valid, False otherwise.
-        str: Error message if invalid, empty string otherwise.
-    """
-    required_columns = ['c^p_{ij}', 'c^l_{ijk}', 'D_{ik}', 'C_{ij}']
-    required_sheets = [f'Solver-{month}' for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                                                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']]
-    
-    try:
-        # Load the Excel file
-        excel_data = pd.ExcelFile(uploaded_file)
-        missing_sheets = [sheet for sheet in required_sheets if sheet not in excel_data.sheet_names]
-        
-        if missing_sheets:
-            return False, f"Missing required sheets: {', '.join(missing_sheets)}"
-        
-        # Check for required columns in each sheet
-        for sheet in required_sheets:
-            sheet_data = pd.read_excel(excel_data, sheet_name=sheet)
-            missing_columns = [col for col in required_columns if col not in sheet_data.columns]
-            
-            if missing_columns:
-                return False, f"Missing required columns in sheet '{sheet}': {', '.join(missing_columns)}!"
-        
-        return True, ""  # File is valid
-    except Exception as e:
-        return False, f"Error reading the file: {str(e)}"
     
 # Set page config
 st.set_page_config(page_title="AB Supply Chain Optimization", layout="wide")
@@ -1225,10 +1219,11 @@ with tab1:
 
     # Display the supply chain map
     try:
-        supply_chain_map = create_supply_chain_map(df_plants, df_warehouses)
+        supply_chain_map = create_supply_chain_map(mappings)
         st.components.v1.html(supply_chain_map._repr_html_(), height=800)
     except Exception as e:
         st.error(f"Error generating supply chain map: {str(e)}")
+        st.code(traceback.format_exc())
     
     # Use session state to maintain data across reruns
     if 'optimization_results' not in st.session_state:
@@ -1452,8 +1447,6 @@ with tab3:
                         
                         # Generate map and routes
                         shipping_routes_map, routes_df = create_shipping_routes_map(
-                            df_plants, 
-                            df_warehouses, 
                             monthly_data,
                             product_id=product_id, 
                             base_only=base_only, 
