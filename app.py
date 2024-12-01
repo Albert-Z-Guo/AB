@@ -56,10 +56,18 @@ mappings = {
     },
     
     'customers': {
-        'Orlando Bubly/Gold': 10025, 'Pepsi STL Gold': 10043, 'AB STL 6 State Lids': 10049,
-        'AB LA Stella': 10056, 'FCL Sealed Lids': 10059, 'AB STL Mango Cart': 10049,
-        'AB STL Stella': 10049, 'AB JKSV Stella': 10052, 'AB FCL Shocktop': 10059,
-        'AB STL Mango Cart 2': 10049, 'Elysian Hazi': 32222
+        'Orlando Bubly/Gold': 10025, 
+        'Pepsi STL Gold': 10043, 
+        'AB STL 6 State Lids': 10049,
+        'AB LA Stella': 10056, 
+        'FCL Sealed Lids - 20% OKC': 10059,
+        'FCL Sealed Lids - 80% RIV': 10059, 
+        'AB STL Mango Cart': 10049,
+        'AB STL Stella': 10049, 
+        'AB JKSV Stella': 10052, 
+        'AB FCL Shocktop': 10059,
+        'AB STL Mango Cart 2': 10049, 
+        'Elysian Hazi': 32222
     },
 
     'customer_warehouse_dict': {
@@ -530,6 +538,8 @@ def create_pattern_visualizations(df: pd.DataFrame, mappings: dict) -> None:
     st.write("Shipping Demand Map (■ = has demand, □ = no demand)") 
     st.dataframe(ship_pattern)
 
+    return prod_pattern, ship_pattern
+
 def adjust_capacity(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Identify capacity issues, adjust capacity to mimic specific inventory usage, 
@@ -579,9 +589,9 @@ def get_sourcing_constraints(df, x, sheet_name):
     # Basic minimum requirements in tuple form (name, i, j, k, min_val)
     basic_reqs = [
         ("Orlando Bubly/Gold", 4, 3, 5, 10),
-        ("STL Gold", 4, 3, 4, 1),
-        ("STL 6 State Lids", 4, 3, 4, 1),
-        ("LA Stella", 4, 5, 1, 3),
+        ("Pepsi STL Gold", 4, 3, 4, 1),
+        ("AB STL 6 State Lids", 4, 3, 4, 1),
+        ("AB LA Stella", 4, 5, 1, 3),
         ("AB STL Mango Cart", 1, 6, 4, 1.2),
         ("AB STL Stella", 1, 2, 4, 0.15),
         ("AB LA Stella", 3, 6, 1, 0.05),
@@ -605,12 +615,12 @@ def get_sourcing_constraints(df, x, sheet_name):
     fcl_demand = df.loc[(df['i'] == 4) & (df['k'] == 3), 'D_{ik}'].values[0]
     constraints.extend([
         {
-            "name": "FCL Sealed Lids - 20% Plant 5",
+            "name": "FCL Sealed Lids - 20% OKC",
             "indices": [(4,5,3)],
             "constraints": (x[4,5,3] >= fcl_demand * 0.2,)
         },
         {
-            "name": "FCL Sealed Lids - 80% Plant 3",
+            "name": "FCL Sealed Lids - 80% RIV",
             "indices": [(4,3,3)],
             "constraints": (x[4,3,3] >= fcl_demand * 0.8,)
         }
@@ -626,29 +636,68 @@ def get_sourcing_constraints(df, x, sheet_name):
     
     return constraints
 
-def test_and_apply_constraints(df, x, constraints, base_constraints, objective):
-    """Test and apply sourcing constraints, printing results."""
-    working_constraints = base_constraints.copy()
+def validate_constraints(df, mappings, sourcing_constraints):
+    """
+    Process and validate sourcing constraints.
     
-    for c in constraints:
-        try:
-            test_constraints = working_constraints + list(c["constraints"])
-            problem = cp.Problem(objective, test_constraints)
-            problem.solve()
-            
-            if problem.status == 'optimal':
-                working_constraints.extend(c["constraints"])
-            else:
-                print(f"\nINFEASIBLE CONSTRAINT FOUND: {c['name']}")
-                for i, j, k in c["indices"]:
-                    demand = df.loc[(df['i'] == i) & (df['k'] == k), 'D_{ik}'].values[0]
-                    capacity = df.loc[(df['i'] == i) & (df['j'] == j), 'C_{ij}'].values[0]
-                    print(f"Product {i}, Plant {j}, Warehouse {k}:")
-                    print(f"Demand: {demand}, Capacity: {capacity}")
-        except Exception as e:
-            print(f"Error with {c['name']}: {e}\n")
+    Args:
+        df (pd.DataFrame): Data containing demand, capacity, and costs.
+        mappings (dict): Dictionary with product, plant, and warehouse mappings.
+        sourcing_constraints (list): List of sourcing constraints.
+        
+    Returns:
+        requirements_df (pd.DataFrame): Processed results with constraint validations.
+        violations_df (pd.DataFrame): Constraints that are not satisfied.
+    """
+    requirements = []
     
-    return problem, working_constraints
+    for c in sourcing_constraints:
+        for (i, j, k), constraint in zip(c["indices"], c["constraints"]):
+            try:
+                # Extract the inequality components
+                lhs, rhs = constraint.args
+                
+                # Ensure the inequality is expressed as lhs >= rhs
+                if isinstance(lhs, cp.Constant) or isinstance(rhs, cp.Variable):
+                    lhs, rhs = rhs, lhs
+                
+                # Extract constraint values
+                x_value = df.loc[(df['i'] == i) & (df['j'] == j) & (df['k'] == k), 'x_{ijk}'].values
+                x_value = x_value[0] if len(x_value) > 0 else None
+                constraint_value = rhs.value if isinstance(rhs, cp.Constant) else None
+                
+                # Append results
+                requirements.append({
+                    "name": c["name"],
+                    "product": mappings['products'].get(i, "Unknown"),
+                    "plant_code": mappings['plants'].get(j, {}).get('code', "Unknown"),
+                    "warehouse_name": mappings['warehouses'].get(k, {}).get('name', "Unknown"),
+                    "customer_id": str(mappings['customers'].get(c["name"], "Unknown")),
+                    "i": i, "j": j, "k": k,
+                    "x_{ijk}": x_value,
+                    "constraint_expression": f"x_{{{i}{j}{k}}} >= {constraint_value:.3f}" if constraint_value else str(constraint),
+                    "constraint_value": round(float(constraint_value), 3),
+                    "D_{ik}": df[(df['i'] == i) & (df['k'] == k)]['x_{ijk}'].sum() if 'x_{ijk}' in df.columns else None,
+                })
+            except Exception as e:
+                requirements.append({
+                    "name": c["name"],
+                    "i": i, "j": j, "k": k,
+                    "error": str(e)
+                })
+
+    # Convert results to DataFrame
+    requirements_df = pd.DataFrame(requirements)
+
+    # Check if constraints are satisfied
+    requirements_df["constraint_satisfied"] = requirements_df.apply(
+        lambda x: "Yes" if pd.notnull(x['x_{ijk}']) and pd.notnull(x['constraint_value']) and x['x_{ijk}'] >= x['constraint_value'] else "No",
+        axis=1
+    )
+
+    # Filter violations
+    violations_df = requirements_df[requirements_df["constraint_satisfied"] == "No"].reset_index(drop=True)
+    return requirements_df, violations_df
 
 def optimize_month(df, sheet_name):
     """Run optimization for a single month"""
@@ -690,9 +739,16 @@ def optimize_month(df, sheet_name):
     
     # Get additional sourcing constraints
     sourcing_constraints = get_sourcing_constraints(df, x, sheet_name)
-    final_problem, final_constraints = test_and_apply_constraints(
-        df, x, sourcing_constraints, base_constraints, objective
-    )
+
+    # Validate sourcing constraints
+    requirements_df, violations_df= validate_constraints(df, mappings, sourcing_constraints)
+
+    # Add sourcing constraints to the problem
+    rules = []
+    for c in sourcing_constraints:
+        rules.extend(c["constraints"])
+    base_and_rules_problem = cp.Problem(objective, base_constraints + rules)
+    base_and_rules_problem.solve()
     
     # Store additional optimization results
     df['x^*_{ijk}_base_and_rules'] = [float(x[i, j, k].value) for i, j, k in zip(df['i'], df['j'], df['k'])]
@@ -701,7 +757,7 @@ def optimize_month(df, sheet_name):
     df['base_and_rules_shipping_cost'] = df['c^l_{ijk}'] * df['x^*_{ijk}_base_and_rules']
     df['diff_base_and_rules'] = df['x^*_{ijk}_base_and_rules'] - df['x_{ijk}']
 
-    return df
+    return df, requirements_df
 
 def optimize_all_months(uploaded_file, mappings):
     """Process all months and return key DataFrames for analysis"""
@@ -730,7 +786,7 @@ def optimize_all_months(uploaded_file, mappings):
                 feasibility_df, all_feasible = check_feasibility(df, mappings)
                 
                 st.write("#### Production and Shipping Patterns")
-                create_pattern_visualizations(df, mappings)
+                prod_pattern, ship_pattern = create_pattern_visualizations(df, mappings)
 
                 # Adjust capacity if needed
                 df_adjusted, adjustments = adjust_capacity(df)
@@ -742,13 +798,17 @@ def optimize_all_months(uploaded_file, mappings):
                         check_feasibility(df_adjusted, mappings)
                     df = df_adjusted
             
-            # Add plant_code, warehouse_id, and customer_id columns
-            df['product_name'] = df['i'].map(mappings['products'])
-            df['plant_code'] = df['j'].map(lambda j: mappings['plants'][j]['code'])
-            df['warehouse_id'] = df['k'].map(lambda k: mappings['warehouses'][k]['#'])
+                # Add plant_code, warehouse_id, and customer_id columns
+                df['product_name'] = df['i'].map(mappings['products'])
+                df['plant_code'] = df['j'].map(lambda j: mappings['plants'][j]['code'])
+                df['warehouse_id'] = df['k'].map(lambda k: mappings['warehouses'][k]['#'])
 
-            # Run optimization for the current month
-            df = optimize_month(df, sheet_name)
+                # Run optimization for the current month
+                df, requirements_df = optimize_month(df, sheet_name)
+                requirements_df.columns = ['Requirement Name', 'Product', 'Plant Code', 'Warehouse', 'Customer ID', \
+                                         'i', 'j', 'k', 'x_{ijk}', 'Requirement Expression', 'Requirement Value', 'Warehouse Sales (Demand)', 'Requirement Met']
+                st.write("#### Current Shipping/Sales Sourcing Requirements Status")
+                st.dataframe(requirements_df)
             
             # Calculate costs
             df['product_name'] = df['i'].map(mappings['products'])
@@ -1214,6 +1274,12 @@ st.title("AB Supply Chain Optimization and Visualization")
 
 tab1, tab2, tab3 = st.tabs(["1. Run Optimization", "2. Visualize Results", "3. Visualize Suggested Routes"])
 
+# Use session state to maintain data across reruns
+if 'optimization_results' not in st.session_state:
+    st.session_state['optimization_results'] = None
+    st.session_state['monthly_data'] = None
+    st.session_state['results'] = None
+
 with tab1:
     st.header("Run Production and Shipping Optimization")
 
@@ -1225,12 +1291,6 @@ with tab1:
         st.error(f"Error generating supply chain map: {str(e)}")
         st.code(traceback.format_exc())
     
-    # Use session state to maintain data across reruns
-    if 'optimization_results' not in st.session_state:
-        st.session_state['optimization_results'] = None
-        st.session_state['monthly_data'] = None
-        st.session_state['results'] = None
-
     uploaded_file = st.file_uploader("Upload `Solver_Sales_Monthly.xlsx` that contains monthly sales (demand), shipping costs, production costs, and production capacity data:", type=['xlsx'])
     
     if uploaded_file is not None:
